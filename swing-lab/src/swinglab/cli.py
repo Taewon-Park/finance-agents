@@ -22,10 +22,23 @@ from swinglab.pipeline.clean import run_checks
 from swinglab.pipeline.ingest import ingest as run_ingest
 from swinglab.pipeline.storage import clean_path, read_prices
 from swinglab.reports import metrics_table, run_cost_scenarios, write_report
+from swinglab.reports.stage1 import write_stage1_report
+from swinglab.research.config import load_stage1
+from swinglab.research.holdout import HoldoutRefused, run_holdout
+from swinglab.research.log import BudgetExceeded, git_commit, read_log, summarize
+from swinglab.research.runner import run_train
+from swinglab.research.selection import IncompleteExperiments, candidates_document, select_all, write_candidates
 from swinglab.sources.yfinance_source import YFinanceSource
 from swinglab.strategies import STRATEGY_NAMES, build_strategy
 
 app = typer.Typer(help="미국 섹터 ETF 스윙 백테스트", no_args_is_help=True, add_completion=False)
+experiments_app = typer.Typer(help="1단계 학습 구간 실험 (검증 구간은 holdout 명령으로만)", no_args_is_help=True)
+report_app = typer.Typer(help="단계별 리포트", no_args_is_help=True)
+app.add_typer(experiments_app, name="experiments")
+app.add_typer(report_app, name="report")
+
+ResultsDir = typer.Option(Path("results"), "--results-dir", help="실험 로그·자산곡선·검증 잠금 위치")
+CandidatesFile = Path("config/candidates.yaml")
 
 ConfigDir = typer.Option(Path("config"), "--config-dir", help="universe.yaml, backtest.yaml 위치")
 DataDir = typer.Option(Path("data"), "--data-dir", help="raw/, clean/ 상위 디렉터리")
@@ -121,6 +134,100 @@ def backtest(
     typer.echo(f"{strategy}: {base.start_date.date()} ~ {base.end_date.date()}\n")
     typer.echo(metrics_table(scenarios, config.cost_bps, universe.benchmark).to_string())
     typer.echo(f"\n리포트: {path}")
+
+
+@experiments_app.command("run")
+def experiments_run(
+    family: str = typer.Option(..., "--family", "-f", help="계열: A, B, C, D (D는 A·C 실행 후)"),
+    config_dir: Path = ConfigDir,
+    data_dir: Path = DataDir,
+    results_dir: Path = ResultsDir,
+) -> None:
+    """계열의 모든 파라미터 조합을 학습 구간에서 비용별로 실행하고 실험 로그에 기록한다."""
+    cfg = load_stage1(config_dir)
+    try:
+        rows = run_train(
+            family.upper(), _load_prices(data_dir), load_universe(config_dir), load_backtest_config(config_dir),
+            cfg, results_dir, Path.cwd(),
+        )
+    except (BudgetExceeded, IncompleteExperiments, ValueError) as exc:
+        typer.echo(f"실행 거부: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    cols = ["family", "strategy", "params", "cost_bp", "sharpe", "cagr", "mdd", "n_trades", "window_start", "window_end"]
+    typer.echo(rows[cols].to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+    typer.echo(f"\n{len(rows)}행 기록 → {results_dir / 'experiments.parquet'} (git {rows['git_commit'].iloc[0][:12]})")
+
+
+@experiments_app.command("summary")
+def experiments_summary(config_dir: Path = ConfigDir, results_dir: Path = ResultsDir) -> None:
+    """계열별 시도 횟수와 샤프 분포 (학습 구간)."""
+    cfg = load_stage1(config_dir)
+    table = summarize(read_log(results_dir), cfg)
+    if table.empty:
+        typer.echo("실험 로그가 없습니다.")
+        return
+    typer.echo(table.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+    typer.echo(f"\n전체 시도 {table.attrs['total_trials']} / 예산 {cfg.budget.total} (계열당 {cfg.budget.per_family})")
+
+
+@experiments_app.command("select")
+def experiments_select(
+    config_dir: Path = ConfigDir,
+    results_dir: Path = ResultsDir,
+    output: Path = typer.Option(CandidatesFile, "--output", help="후보 파일 경로"),
+) -> None:
+    """후보 선정 규칙으로 계열당 후보를 고르고 candidates.yaml을 쓴다 (학습 구간 결과만 사용)."""
+    cfg = load_stage1(config_dir)
+    try:
+        selections = select_all(read_log(results_dir), cfg)
+    except IncompleteExperiments as exc:
+        typer.echo(f"선정 불가: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    doc = candidates_document(selections, cfg, git_commit(Path.cwd()))
+    write_candidates(output, doc)
+    for fam, sel in selections.items():
+        c = sel.candidate
+        typer.echo(f"{fam}: {c.display_name + ' ' + c.params_json if c else '후보 없음'}")
+        for note in sel.notes:
+            typer.echo(f"    {note}")
+    typer.echo(f"\n저장: {output}. 커밋한 뒤 swinglab holdout --candidates {output}")
+
+
+@app.command()
+def holdout(
+    candidates: Path = typer.Option(..., "--candidates", help="커밋된 후보 파일 (config/candidates.yaml)"),
+    force: bool = typer.Option(False, "--force", help="같은 후보로 다시 실행 (잠금 기록에 forced=true)"),
+    config_dir: Path = ConfigDir,
+    data_dir: Path = DataDir,
+    results_dir: Path = ResultsDir,
+) -> None:
+    """검증 구간 실행. 같은 후보로는 한 번만 (results/holdout.lock)."""
+    try:
+        rows = run_holdout(
+            candidates, _load_prices(data_dir), load_universe(config_dir), load_backtest_config(config_dir),
+            load_stage1(config_dir), results_dir, Path.cwd(), force=force,
+        )
+    except HoldoutRefused as exc:
+        typer.echo(f"실행 거부: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"검증 구간 {len(rows)}행 기록. 결과는 swinglab report stage1로 확인")
+
+
+@report_app.command("stage1")
+def report_stage1(
+    config_dir: Path = ConfigDir,
+    results_dir: Path = ResultsDir,
+    reports_dir: Path = ReportsDir,
+    candidates: Path = typer.Option(CandidatesFile, "--candidates", help="후보 파일"),
+    offline: bool = typer.Option(False, "--offline", help="plotly.js를 HTML에 포함"),
+) -> None:
+    """1단계 리포트 HTML (results/ 파일만 읽음, 백테스트를 다시 돌리지 않음)."""
+    try:
+        path = write_stage1_report(load_stage1(config_dir), results_dir, candidates, reports_dir, offline=offline)
+    except FileNotFoundError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"리포트: {path}")
 
 
 def _load_prices(data_dir: Path) -> pd.DataFrame:

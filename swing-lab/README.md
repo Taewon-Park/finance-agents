@@ -40,6 +40,28 @@ uv run pytest                              # 자동 테스트
 | `max_positions` | 동시 보유 수. None이면 `backtest.yaml` 값 (바이앤홀드 = 1) |
 | `max_hold_days` | 실제 진입일부터 센 최대 보유 거래일 (RSI(2) = 10) |
 
+## 1단계: 전략 비교 (`../stage1-spec.md`)
+
+```bash
+uv run swinglab experiments run -f A        # A, B, C 순서로 학습 구간 실행 (비용 0/5/10bp, 실험 로그 자동 기록)
+uv run swinglab experiments run -f D        # A·C 후보가 정해진 뒤 시장 필터 비교
+uv run swinglab experiments summary         # 계열별 시도 횟수, 샤프 분포
+uv run swinglab experiments select          # 후보 선정 규칙 → config/candidates.yaml (커밋할 것)
+uv run swinglab holdout --candidates config/candidates.yaml   # 검증 구간, 같은 후보로는 1회
+uv run swinglab report stage1               # reports/stage1.html (results/ 파일만 읽음)
+```
+
+- 구간·예산·파라미터 후보·선정 규칙은 `config/stage1.yaml`. 바꾸려면 스펙을 먼저 고친다.
+- 학습 실행은 가격을 2018-12-31까지 잘라서 넘기므로 검증 구간 데이터가 코드 경로에 없다.
+- 결과물: `results/experiments.parquet`(실험 로그), `equity_curves.parquet`, `benchmarks.parquet`, `holdout.lock`. git 제외.
+
+스펙에서 정한 해석
+- A: 청산은 조건이 성립한 그날 보유일 ≥ min_hold일 때만 (엔진 `min_hold_days`). 진입·청산 같은 날이면 청산 우선.
+- B: 월말 종가 대비 lookback개월 수익률. IEF 대체는 자리마다 별도 포지션(IEF#1, IEF#2 …)이라 비중 = 대체 자리 수 / top_n.
+- C: 돌파한 날에만 진입 후보.
+- 규칙 3: 1순위의 인접 조합 샤프 평균 < 1순위 × 0.7이면 고립, '자기+인접' 평균 최고 조합 선택. 1순위 샤프 ≤ 0이면 생략.
+- D: 필터 버전이 필터 전보다 샤프 0.05 이상 높은 것 중 최고 1개. 필터 전 sma_cross는 baseline으로 기록, 시도 수 제외.
+
 ## 검증 기록
 
 - `notebooks/manual_check.ipynb`: RSI(2) 거래 무작위 5건을 엔진과 독립된 계산으로 대조
