@@ -1,6 +1,7 @@
 from swinglab.config import UniverseConfig
 from swinglab.strategies.base import Strategy, price_panel
 from swinglab.strategies.buy_hold import BuyAndHold
+from swinglab.strategies.market_filter import MarketFilter
 from swinglab.strategies.rsi2_pullback import Rsi2Pullback
 from swinglab.strategies.sma_cross import SmaCross
 
@@ -21,6 +22,7 @@ def build_strategy(name: str, universe: UniverseConfig) -> Strategy:
 __all__ = [
     "STRATEGY_NAMES",
     "BuyAndHold",
+    "MarketFilter",
     "Rsi2Pullback",
     "SmaCross",
     "Strategy",

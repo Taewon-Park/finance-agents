@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from swinglab.indicators import rsi_wilder, sma
+from swinglab.strategies.base import hold_state as _hold_state
 from swinglab.strategies.base import price_panel
 
 
@@ -48,22 +49,3 @@ class Rsi2Pullback:
     def strength(self, prices: pd.DataFrame) -> pd.DataFrame:
         rsi, entry, _, _ = self._components(prices)
         return (-rsi).where(entry)
-
-
-def _hold_state(entry: np.ndarray, exit_: np.ndarray, valid: np.ndarray) -> np.ndarray:
-    """청산 조건이면 0, 아니고 진입 조건이면 1, 둘 다 아니면 이전 상태 유지.
-
-    두 조건이 같은 날 성립하면 청산이 우선한다 (보유 중이든 아니든 같은 규칙).
-    데이터가 없는 날은 NaN이고 상태는 유지한다.
-    """
-    state = 0.0
-    out = np.full(len(entry), np.nan)
-    for i in range(len(entry)):
-        if not valid[i]:
-            continue
-        if exit_[i]:
-            state = 0.0
-        elif entry[i]:
-            state = 1.0
-        out[i] = state
-    return out

@@ -7,6 +7,11 @@
 - 진입 예산(비용 포함) = min(그날 시가 기준 총자산 / max_positions, 보유 현금). 리밸런싱 없음.
 - 신규 진입 후보: 미보유 & 목표 1 & 강도 값 있음. 강도 큰 순, 동점이면 티커 알파벳순.
 - 보유 종목: 목표 0이면 청산, 목표 NaN(신호 없음)이면 유지, max_hold_days에 닿으면 청산.
+  min_hold_days가 있으면 보유일(진입일 포함, 그날 종가까지)이 그 이상일 때만 목표 0으로 청산한다.
+- rebalance="monthly": 월 마지막 거래일 종가의 신호만 반영해 다음 달 첫 거래일 시가에 체결한다.
+  그 외 날에는 주문을 정하지 않는다 (목표 상태 유지).
+- price_aliases: 같은 종목을 여러 자리로 들고 싶을 때 쓰는 별칭 (예: "IEF#2" → IEF 가격).
+  별칭마다 별도 포지션이며 체결·비용 규칙은 같다.
 - 체결할 날 시가가 없으면: 청산은 다음으로 시가가 있는 날로 미루고, 진입은 취소한다
   (다음 신호로 다시 판단).
 - 평가: 종가 기준. 결측일에는 직전 종가로 평가한다.
@@ -81,6 +86,11 @@ def run_backtest(prices: pd.DataFrame, strategy: Strategy, config: BacktestConfi
     cost = CostModel.from_bps(config.cost_bps)
     max_positions = strategy.max_positions or config.max_positions
     max_hold = strategy.max_hold_days
+    min_hold = getattr(strategy, "min_hold_days", None)
+    rebalance = getattr(strategy, "rebalance", "daily")
+    if rebalance not in ("daily", "monthly"):
+        raise ValueError(f"rebalance는 daily 또는 monthly여야 합니다: {rebalance}")
+    aliases: dict[str, str] = getattr(strategy, "price_aliases", None) or {}
 
     calendar = pd.DatetimeIndex(np.sort(prices["date"].unique()))
     target = strategy.generate(prices).reindex(calendar)
@@ -88,8 +98,10 @@ def run_backtest(prices: pd.DataFrame, strategy: Strategy, config: BacktestConfi
     strength = strategy.strength(prices).reindex(index=calendar, columns=tickers)
     _validate_target(target)
 
-    opens = price_panel(prices, "open", tickers).reindex(calendar).to_numpy(dtype=float)
-    closes_ff = price_panel(prices, "close", tickers).reindex(calendar).ffill().to_numpy(dtype=float)
+    opens = _aliased_panel(prices, "open", tickers, aliases).reindex(calendar).to_numpy(dtype=float)
+    closes_ff = _aliased_panel(prices, "close", tickers, aliases).reindex(calendar).ffill().to_numpy(dtype=float)
+    # 월 마지막 거래일: 다음 거래일의 달이 다르다 (마지막 날은 주문을 정하지 않으므로 값은 쓰이지 않는다)
+    month_end = np.r_[calendar.month[1:] != calendar.month[:-1], True]
     tgt = target.to_numpy(dtype=float)
     stg = strength.to_numpy(dtype=float)
 
@@ -109,12 +121,15 @@ def run_backtest(prices: pd.DataFrame, strategy: Strategy, config: BacktestConfi
 
     def decide(i: int) -> list[int]:
         """i일 종가 기준으로 다음 시가의 청산(pending_exits 갱신)과 진입 후보(반환)를 정한다."""
+        if rebalance == "monthly" and not month_end[i]:
+            return []
         for j in map(int, np.flatnonzero(shares > 0)):
             if j in pending_exits:
                 continue
-            if tgt[i, j] == 0.0:
+            held_days = i - entry_idx[j] + 1
+            if tgt[i, j] == 0.0 and (min_hold is None or held_days >= min_hold):
                 pending_exits[j] = "signal"
-            elif max_hold is not None and i - entry_idx[j] + 1 >= max_hold:
+            elif max_hold is not None and held_days >= max_hold:
                 pending_exits[j] = "max_hold"
         candidates = [
             j
@@ -223,6 +238,14 @@ def run_benchmark(
     """like와 같은 구간(같은 첫 체결일·마지막 날)의 바이앤홀드."""
     window = config.model_copy(update={"start": like.start_date.date(), "end": like.end_date.date()})
     return run_backtest(prices, BuyAndHold(ticker=ticker, name=f"{ticker} buy&hold"), window)
+
+
+def _aliased_panel(prices: pd.DataFrame, field: str, tickers: list[str], aliases: dict[str, str]) -> pd.DataFrame:
+    """date × ticker 가격표. 별칭 열은 원래 종목의 가격을 그대로 쓴다."""
+    bases = [aliases.get(t, t) for t in tickers]
+    panel = price_panel(prices, field, list(dict.fromkeys(bases)))[bases]
+    panel.columns = tickers
+    return panel
 
 
 def _window(calendar: pd.DatetimeIndex, warmup_days: int, config: BacktestConfig) -> tuple[int, int]:
