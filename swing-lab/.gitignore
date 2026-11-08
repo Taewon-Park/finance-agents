@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# 수집 데이터와 생성된 리포트는 재생성 가능하므로 커밋하지 않는다.
+data/raw/*
+data/clean/*
+!data/raw/.gitkeep
+!data/clean/.gitkeep
+reports/*
+!reports/.gitkeep
