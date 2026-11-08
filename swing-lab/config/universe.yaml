@@ -1,0 +1,12 @@
+# 0단계 유니버스: 섹터·테마 ETF 20개
+# benchmark는 모든 비교의 기준이며, 매매 전략(sma_cross, rsi2_pullback) 대상에서는 빠진다.
+benchmark: SPY
+start: 2010-01-01   # 수집 시작일. 상장이 늦은 ETF는 상장일부터 받는다.
+
+groups:
+  benchmark: [SPY]
+  index: [QQQ, IWM, DIA]
+  sector_spdr: [XLK, XLF, XLV, XLE, XLI, XLY, XLP, XLU, XLB]
+  sector_late: [XLRE, XLC]          # XLRE 2015년, XLC 2018년 상장
+  semiconductor: [SMH, SOXX]
+  bond_gold: [TLT, IEF, GLD]        # 위험자산과의 관계 확인용
