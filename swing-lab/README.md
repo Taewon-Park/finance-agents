@@ -15,6 +15,7 @@ uv run pytest                              # 자동 테스트
 ```
 
 - `backtest`의 리포트는 plotly.js를 CDN에서 불러온다 (열 때 인터넷 필요, 약 0.9MB). `--offline`을 주면 파일에 포함한다 (약 5.7MB).
+- `uv run python scripts/strategy_summary.py`: 전략 × 비용 0/5/10bp 비교 요약표(마크다운). CAGR, MDD, 샤프, 노출도, 연 거래 횟수, 같은 기간 SPY CAGR.
 - `ingest --full`: 전체 재수집. `--tickers SPY,QQQ`: 일부만. 기본 마지막 날은 장 마감된 최근 거래일.
 - 증분 수집은 최근 5거래일을 겹쳐 받아 비교하고, 수정주가가 달라졌으면(새 배당·분할) 그 종목만 전체를 다시 받는다.
 - `data/`, `reports/` 결과물은 git에 넣지 않는다.
