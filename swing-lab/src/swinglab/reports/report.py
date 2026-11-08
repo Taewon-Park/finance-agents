@@ -101,7 +101,10 @@ def write_report(
     config: BacktestConfig,
     benchmark: str,
     out_dir: Path,
+    offline: bool = False,
 ) -> Path:
+    """HTML 리포트를 쓴다. plotly.js는 기본으로 CDN에서 불러오고, offline이면 파일에 포함한다
+    (인터넷 없이 열 수 있지만 파일이 약 5MB 커진다)."""
     base = next((s for s in scenarios if s.cost_bps == config.cost_bps), scenarios[0])
     result, bench = base.result, base.benchmark
     table = metrics_table(scenarios, config.cost_bps, benchmark)
@@ -149,7 +152,7 @@ def write_report(
   {html.escape(benchmark)} 바이앤홀드는 전략과 같은 첫 체결일·마지막 날로 계산.</p>
   {table.to_html(classes="metrics", border=0, escape=True)}
 </section>
-<section>{fig_equity.to_html(full_html=False, include_plotlyjs=True)}</section>
+<section>{fig_equity.to_html(full_html=False, include_plotlyjs=True if offline else "cdn")}</section>
 <section>{fig_dd.to_html(full_html=False, include_plotlyjs=False)}</section>
 <section>
   <h2>기말 미청산 포지션 ({len(open_pos)}개, 마지막 종가 평가, 청산 비용 미반영)</h2>

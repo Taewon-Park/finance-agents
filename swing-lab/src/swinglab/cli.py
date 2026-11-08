@@ -98,6 +98,9 @@ def backtest(
     config_dir: Path = ConfigDir,
     data_dir: Path = DataDir,
     reports_dir: Path = ReportsDir,
+    offline: bool = typer.Option(
+        False, "--offline", help="plotly.js를 HTML에 포함 (인터넷 없이 열람, 파일 약 5MB). 기본은 CDN 로드"
+    ),
 ) -> None:
     """전략 백테스트를 비용 시나리오별로 돌리고 HTML 리포트를 만든다."""
     if strategy not in STRATEGY_NAMES:
@@ -113,7 +116,7 @@ def backtest(
         typer.echo(f"경고: 데이터에 없는 종목 {', '.join(missing)} (swinglab ingest로 수집 필요)", err=True)
 
     scenarios = run_cost_scenarios(prices, strat, config, universe.benchmark)
-    path = write_report(scenarios, strat, config, universe.benchmark, reports_dir)
+    path = write_report(scenarios, strat, config, universe.benchmark, reports_dir, offline=offline)
     base = scenarios[0].result
     typer.echo(f"{strategy}: {base.start_date.date()} ~ {base.end_date.date()}\n")
     typer.echo(metrics_table(scenarios, config.cost_bps, universe.benchmark).to_string())

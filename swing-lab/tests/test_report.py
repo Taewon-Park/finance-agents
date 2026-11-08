@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from conftest import random_walk_prices
@@ -31,3 +32,21 @@ def test_report_has_cost_scenarios_and_charts(tmp_path: Path) -> None:
     assert path.name == "sma_cross.html"
     assert html.count('class="plotly-graph-div"') == 2  # 자산곡선, 드로다운 (제목은 JSON 안에 이스케이프됨)
     assert "성과 지표" in html and "거래 내역" in html
+
+
+CDN_SCRIPT = re.compile(r'<script[^>]*src="https://cdn\.plot\.ly/plotly-[^"]+\.min\.js"')
+
+
+def test_report_loads_plotly_from_cdn_by_default_and_embeds_when_offline(tmp_path: Path) -> None:
+    prices = random_walk_prices(["SPY", "AAA"], 150, seed=2)
+    config = BacktestConfig(initial_capital=100_000, cost_bps=5, cost_sensitivity_bps=[5])
+    strategy = SmaCross(tickers=["AAA"])
+    scenarios = run_cost_scenarios(prices, strategy, config, "SPY")
+
+    cdn_html = write_report(scenarios, strategy, config, "SPY", tmp_path / "cdn").read_text(encoding="utf-8")
+    offline_html = write_report(scenarios, strategy, config, "SPY", tmp_path / "off", offline=True).read_text(
+        encoding="utf-8"
+    )
+    assert len(CDN_SCRIPT.findall(cdn_html)) == 1
+    assert not CDN_SCRIPT.search(offline_html)
+    assert len(offline_html) > len(cdn_html) + 1_000_000  # plotly.js 본문(수 MB)이 들어감
