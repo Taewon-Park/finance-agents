@@ -42,3 +42,4 @@ uv run pytest                              # 자동 테스트
 
 - `notebooks/manual_check.ipynb`: RSI(2) 거래 무작위 5건을 엔진과 독립된 계산으로 대조
 - `notebooks/external_check.ipynb`: SPY 수익률을 SSGA 공개 총수익률과 비교
+- `uv run python scripts/spy_crosscheck.py`: 위 비교를 재현. 기준은 체결 시점(익일 시가) 차이를 보정한 값 기준 연 0.1%p 이내, 통과 시 종료 코드 0
