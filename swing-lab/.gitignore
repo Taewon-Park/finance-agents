@@ -11,3 +11,6 @@ data/clean/*
 !data/clean/.gitkeep
 reports/*
 !reports/.gitkeep
+
+# 1단계 실험 결과 (실험 로그, 자산곡선, 검증 잠금)
+results/

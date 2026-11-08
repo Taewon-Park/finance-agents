@@ -40,10 +40,10 @@ def make_prices(opens: pd.DataFrame, closes: pd.DataFrame | None = None, volume:
 
 
 def random_walk_prices(
-    tickers: list[str], n: int, seed: int = 0, drift: float = 0.0004, vol: float = 0.015
+    tickers: list[str], n: int, seed: int = 0, drift: float = 0.0004, vol: float = 0.015, start: str = "2020-01-01"
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
-    dates = trading_dates(n)
+    dates = trading_dates(n, start)
     closes, opens = {}, {}
     for t in tickers:
         rets = rng.normal(drift, vol, n)
