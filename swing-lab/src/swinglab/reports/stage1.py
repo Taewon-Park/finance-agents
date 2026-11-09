@@ -23,7 +23,7 @@ from swinglab.research.config import Stage1Config
 from swinglab.research.holdout import read_lock
 from swinglab.research.log import BASELINE_FAMILY, latest_runs, read_log, summarize, trial_keys
 from swinglab.research.runner import benchmarks_path, read_curves
-from swinglab.research.selection import IncompleteExperiments, read_candidates, select_all
+from swinglab.research.selection import IncompleteExperiments, read_candidates, read_candidates_document, select_all
 from swinglab.research.specs import StrategySpec
 from swinglab.reports.report import GRID, INK_MUTED, INK_PRIMARY, INK_SECONDARY, SURFACE, render_page
 
@@ -45,11 +45,12 @@ def write_stage1_report(
     curves = read_curves(results_dir)
     bench = pd.read_parquet(benchmarks_path(results_dir)) if benchmarks_path(results_dir).exists() else pd.DataFrame()
     candidates = read_candidates(candidates_file) if candidates_file.exists() else []
+    procedure_notes = read_candidates_document(candidates_file).get("procedure_notes", []) if candidates_file.exists() else []
     lock = read_lock(results_dir)
     sel_bp = cfg.selection_cost_bps
     plotly_js: str | bool = True if offline else "cdn"
 
-    sections = [_header(cfg, log, candidates_file, candidates, lock)]
+    sections = [_header(cfg, log, candidates_file, candidates, lock, procedure_notes)]
     sections.append(_train_section(cfg, log, bench))
     if candidates:
         train_ids = {_spec_key(s): _run_id(log, s, "train", sel_bp) for s in candidates}
@@ -70,7 +71,10 @@ def write_stage1_report(
 # ---------------------------------------------------------------- 섹션
 
 
-def _header(cfg: Stage1Config, log: pd.DataFrame, cand_file: Path, candidates: list[StrategySpec], lock: list[dict]) -> str:
+def _header(
+    cfg: Stage1Config, log: pd.DataFrame, cand_file: Path, candidates: list[StrategySpec], lock: list[dict],
+    procedure_notes: list[str],
+) -> str:
     n_trials = len(trial_keys(log))
     holdout_state = (
         f"실행됨 {len(lock)}회 (마지막 {html.escape(lock[-1]['timestamp'])}, forced={lock[-1]['forced']})" if lock else "미실행"
@@ -79,7 +83,7 @@ def _header(cfg: Stage1Config, log: pd.DataFrame, cand_file: Path, candidates: l
 <header>
   <h1>1단계 전략 비교</h1>
   <dl class="meta">
-    <div><dt>학습 구간</dt><dd>{cfg.train.start} ~ {cfg.train.end}</dd></div>
+    <div><dt>학습 구간</dt><dd>{cfg.train.start} ~ {cfg.train.end} (성과 집계 {cfg.train.evaluation_start}부터)</dd></div>
     <div><dt>검증 구간</dt><dd>{cfg.holdout.start} ~ {cfg.holdout.end or '최신'}</dd></div>
     <div><dt>비용</dt><dd>{', '.join(f'{c:g}bp' for c in cfg.cost_bps)} (선정 기준 {cfg.selection_cost_bps:g}bp)</dd></div>
     <div><dt>시도 수</dt><dd>{n_trials} / 전체 예산 {cfg.budget.total} (계열당 {cfg.budget.per_family})</dd></div>
@@ -87,6 +91,8 @@ def _header(cfg: Stage1Config, log: pd.DataFrame, cand_file: Path, candidates: l
     <div><dt>검증 실행</dt><dd>{holdout_state}</dd></div>
     <div><dt>생성</dt><dd>{datetime.now():%Y-%m-%d %H:%M}</dd></div>
   </dl>
+  {"".join(f"<p class='note'>절차 메모: {html.escape(n)}</p>" for n in procedure_notes)}
+  <p class='note'>runs는 같은 조합 재실행을 포함한 실행 횟수다. 표의 값은 조합별 가장 최근 실행이다.</p>
 </header>"""
 
 

@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from swinglab.backtest.engine import BacktestResult, run_backtest
@@ -68,10 +69,21 @@ def run_train(
     sliced = train_prices(prices, cfg)
     if sliced.empty:
         raise ValueError("학습 구간 가격 데이터가 없습니다")
-    window = Period(start=cfg.train.start, end=cfg.train.end)
+    window = Period(start=cfg.train.evaluation_start, end=cfg.train.end)
+    if cfg.train.evaluate_from is not None:
+        _check_warmup(specs, sliced, window, universe)
     rows = run_specs(specs, sliced, window, "train", universe, bt_config, cfg, results_dir, git_commit(repo_dir))
     save_benchmark(sliced, "train", window, universe, bt_config, cfg, results_dir)
     return pd.DataFrame(rows)
+
+
+def _check_warmup(specs: list[StrategySpec], prices: pd.DataFrame, window: Period, universe: UniverseConfig) -> None:
+    """공통 평가 시작일 전에 모든 전략의 워밍업이 끝나는지. 아니면 전략마다 시작일이 달라지므로 거부한다."""
+    calendar = pd.DatetimeIndex(np.sort(prices["date"].unique()))
+    start_idx = int(calendar.searchsorted(pd.Timestamp(window.start), side="left"))
+    late = [s.display_name for s in specs if s.build(universe).warmup_days > start_idx]
+    if late:
+        raise ValueError(f"평가 시작일 {window.start}이 워밍업보다 이릅니다: {', '.join(late)}")
 
 
 def run_specs(

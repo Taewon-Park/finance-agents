@@ -16,6 +16,11 @@ GridIndex = tuple[int, ...]
 class Period(BaseModel):
     start: date
     end: date | None = None
+    evaluate_from: date | None = None  # 성과 집계 시작일 (모든 전략 공통). 없으면 전략별 워밍업 이후부터
+
+    @property
+    def evaluation_start(self) -> date:
+        return self.evaluate_from or self.start
 
 
 class Budget(BaseModel):
@@ -88,6 +93,9 @@ class Stage1Config(BaseModel):
             raise ValueError("periods에는 train, holdout만 있어야 합니다")
         if self.train.end is None or self.train.end >= self.holdout.start:
             raise ValueError("학습 구간은 검증 구간 시작 전에 끝나야 합니다")
+        ev = self.train.evaluate_from
+        if ev is not None and not (self.train.start < ev <= self.train.end):
+            raise ValueError("evaluate_from은 학습 구간 안에 있어야 합니다")
         if self.selection_cost_bps not in self.cost_bps:
             raise ValueError("selection_cost_bps는 cost_bps 안에 있어야 합니다")
         for name, fam in self.families.items():

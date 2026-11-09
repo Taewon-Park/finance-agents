@@ -166,7 +166,9 @@ def select_all(log: pd.DataFrame, cfg: Stage1Config) -> dict[str, FamilySelectio
 # ---------------------------------------------------------------- candidates.yaml
 
 
-def candidates_document(selections: dict[str, FamilySelection], cfg: Stage1Config, commit: str) -> dict[str, Any]:
+def candidates_document(
+    selections: dict[str, FamilySelection], cfg: Stage1Config, commit: str, procedure_notes: list[str] | None = None
+) -> dict[str, Any]:
     specs = [s.candidate for s in selections.values() if s.candidate is not None]
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -174,7 +176,9 @@ def candidates_document(selections: dict[str, FamilySelection], cfg: Stage1Confi
         "selection_cost_bps": cfg.selection_cost_bps,
         "candidates_hash": specs_hash(specs),
         "candidates": [s.to_dict() for s in specs],
+        "train_evaluation": f"{cfg.train.evaluation_start} ~ {cfg.train.end}",
         "notes": {fam: sel.notes for fam, sel in selections.items() if sel.notes},
+        "procedure_notes": list(procedure_notes or []),
     }
 
 
@@ -187,10 +191,13 @@ def write_candidates(path: Path, doc: dict[str, Any]) -> None:
     path.write_text(header + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
 
-def read_candidates(path: Path) -> list[StrategySpec]:
+def read_candidates_document(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as f:
-        doc = yaml.safe_load(f) or {}
-    return [StrategySpec.from_dict(d) for d in doc.get("candidates") or []]
+        return yaml.safe_load(f) or {}
+
+
+def read_candidates(path: Path) -> list[StrategySpec]:
+    return [StrategySpec.from_dict(d) for d in read_candidates_document(path).get("candidates") or []]
 
 
 __all__ = [

@@ -1,7 +1,9 @@
 # 1단계 실험 설정 (stage1-spec.md). 구간·예산·파라미터 후보·선정 규칙을 바꾸려면 스펙을 먼저 고친다.
 
 periods:
-  train: {start: 2010-01-01, end: 2018-12-31}     # 파라미터 탐색과 후보 선정
+  # 파라미터 탐색과 후보 선정. 성과는 evaluate_from부터 모든 전략이 같은 날짜로 집계한다
+  # (그 전은 워밍업). 가장 긴 워밍업(B lookback 12개월)이 끝난 뒤 첫 월초.
+  train: {start: 2010-01-01, end: 2018-12-31, evaluate_from: 2011-03-01}
   holdout: {start: 2019-01-01, end: null}         # 최종 후보만, swinglab holdout으로만 실행
 
 cost_bps: [0, 5, 10]

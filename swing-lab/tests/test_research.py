@@ -339,3 +339,33 @@ def test_holdout_requires_committed_candidates(tmp_path: Path, prices: pd.DataFr
     _git(tmp_path, "commit", "-q", "-m", "candidates")
     rows = run_holdout(cand, prices, UNIVERSE, BT, small_cfg(), tmp_path / "results", tmp_path)
     assert len(rows) == 2
+
+
+# ---------------------------------------------------------------- 공통 평가 시작일
+
+
+def test_evaluate_from_aligns_all_windows(tmp_path: Path, prices: pd.DataFrame) -> None:
+    cfg = small_cfg(periods={"train": {"start": "2016-01-01", "end": "2018-12-31", "evaluate_from": "2016-09-01"},
+                             "holdout": {"start": "2019-01-01"}})
+    rows = run_train("C", prices, UNIVERSE, BT, cfg, tmp_path, tmp_path)
+    assert set(rows["window_start"]) == {"2016-09-01"}  # 2016-09-01(목) 첫 체결, 두 조합 같은 날
+    bench = pd.read_parquet(tmp_path / "benchmarks.parquet")
+    assert set(bench["window_start"]) == {"2016-09-01"}
+
+
+def test_evaluate_from_before_warmup_is_refused(tmp_path: Path, prices: pd.DataFrame) -> None:
+    cfg = small_cfg(periods={"train": {"start": "2016-01-01", "end": "2018-12-31", "evaluate_from": "2016-02-01"},
+                             "holdout": {"start": "2019-01-01"}})
+    with pytest.raises(ValueError, match="워밍업"):
+        run_train("C", prices, UNIVERSE, BT, cfg, tmp_path, tmp_path)  # 55/20 조합 워밍업 64일 > 시작 인덱스
+    assert read_log(tmp_path).empty
+
+
+def test_candidates_document_records_procedure_notes(tmp_path: Path) -> None:
+    from swinglab.research.selection import FamilySelection, read_candidates_document
+
+    spec = StrategySpec("C", "breakout", {"entry_n": 20, "exit_n": 10})
+    doc = candidates_document({"C": FamilySelection("C", pd.DataFrame(), spec)}, small_cfg(), "abc", ["재실행 사유"])
+    write_candidates(tmp_path / "c.yaml", doc)
+    back = read_candidates_document(tmp_path / "c.yaml")
+    assert back["procedure_notes"] == ["재실행 사유"] and back["candidates_hash"] == specs_hash([spec])

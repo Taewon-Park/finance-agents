@@ -175,6 +175,7 @@ def experiments_select(
     config_dir: Path = ConfigDir,
     results_dir: Path = ResultsDir,
     output: Path = typer.Option(CandidatesFile, "--output", help="후보 파일 경로"),
+    note: list[str] = typer.Option([], "--note", help="candidates.yaml에 남길 절차 메모 (여러 번 가능)"),
 ) -> None:
     """후보 선정 규칙으로 계열당 후보를 고르고 candidates.yaml을 쓴다 (학습 구간 결과만 사용)."""
     cfg = load_stage1(config_dir)
@@ -183,7 +184,7 @@ def experiments_select(
     except IncompleteExperiments as exc:
         typer.echo(f"선정 불가: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    doc = candidates_document(selections, cfg, git_commit(Path.cwd()))
+    doc = candidates_document(selections, cfg, git_commit(Path.cwd()), procedure_notes=note)
     write_candidates(output, doc)
     for fam, sel in selections.items():
         c = sel.candidate
