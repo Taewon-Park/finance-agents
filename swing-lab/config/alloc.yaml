@@ -1,0 +1,58 @@
+# 2단계 트랙 2: 분기 리밸런싱 (stage2-spec.md). 정책·값은 사전 고정이며 결과를 보고 바꾸지 않는다.
+# 정책을 추가·변경하려면 스펙을 먼저 고친다 (실험 로그의 alloc 시도는 max_trials개까지).
+
+band: 0.05             # 허용 범위: 목표 대비 절대값 5%p 이상 벗어난 자산만 매매
+cash_proxy: BIL        # 남는 비중을 받는 현금 대용
+
+trend:                 # P3 추세 필터
+  assets: [SPY, EFA, EEM, GLD]
+  months: 10           # 월말 종가가 최근 10개 월말 종가 평균 아래면 그 비중을 BIL로
+
+policies:
+  P0: {weights: {SPY: 1.0}}
+  P1: {weights: {SPY: 0.60, IEF: 0.40}}
+  P2: {weights: {SPY: 0.55, EFA: 0.10, EEM: 0.05, IEF: 0.15, GLD: 0.10, BIL: 0.05}}
+  P3: {weights: {SPY: 0.55, EFA: 0.10, EEM: 0.05, IEF: 0.15, GLD: 0.10, BIL: 0.05}, trend_filter: true}
+max_trials: 4
+
+backtest:
+  start: 2011-03-01    # 1단계와 같은 집계 시작일
+  end: null            # 데이터 끝까지
+  initial_capital: 100000
+  cost_bps: [0, 5, 10]
+  report_cost_bps: 5
+  drawdown_periods:
+    - {name: "2020 코로나 급락", start: 2020-02-01, end: 2020-03-31}
+    - {name: "2022 하락장", start: 2022-01-01, end: 2022-12-31}
+
+# 사전 고정 목표 (스펙, 2026-11-10 백테스트 전)
+goal:
+  policy: P3
+  max_drawdown: -0.15
+  cost_bps: 5
+
+tax:                   # 해외주식 양도소득세 추정 (참고용)
+  rate: 0.22
+  deduction_krw: 2500000
+  fx_pair: USDKRW
+
+live:                  # swinglab rebalance
+  policy: P3
+  holdings: private/holdings.csv
+  output_dir: private/rebalance
+  cost_bps: 5          # 예상 금액 계산용
+  # 목표 시점 대비 위험 조절 (설정만, 백테스트 안 함). enabled면 start_date→target_date 동안
+  # 주식(SPY, EFA, EEM) 합계 비중을 start_equity에서 end_equity로 선형으로 줄이고 차이를 IEF·BIL로 옮긴다.
+  target_date: null
+  glide_path:
+    enabled: false
+    start_date: null
+    start_equity: null
+    end_equity: null
+
+llm:                   # 리밸런싱 문서의 요약 (선택). 로컬 LLM만, 숫자는 표의 숫자만 허용
+  enabled: false
+  endpoint: http://localhost:11434/api/generate
+  model: qwen2.5:7b
+  timeout_seconds: 60
+  max_retries: 2
