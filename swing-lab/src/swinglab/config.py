@@ -13,15 +13,20 @@ class UniverseConfig(BaseModel):
     benchmark: str
     start: date
     groups: dict[str, list[str]]
+    # 수집만 하고 0·1단계 매매 전략 대상(tickers, tradable)에는 넣지 않는 종목 (2단계 자산배분용)
+    collect_only: dict[str, list[str]] = Field(default_factory=dict)
+    # 환율: 이름 → FRED 시리즈 ID (예: USDKRW: DEXKOUS)
+    fx: dict[str, str] = Field(default_factory=dict)
 
     @property
     def tickers(self) -> list[str]:
-        """그룹 순서를 유지한 전체 티커 목록 (중복 제거)."""
-        seen: dict[str, None] = {}
-        for members in self.groups.values():
-            for ticker in members:
-                seen.setdefault(ticker, None)
-        return list(seen)
+        """그룹 순서를 유지한 전체 티커 목록 (중복 제거). collect_only는 들어가지 않는다."""
+        return _unique(self.groups)
+
+    @property
+    def collect_tickers(self) -> list[str]:
+        """수집 대상 전체 = tickers + collect_only."""
+        return _unique({**self.groups, **{f"collect_only:{k}": v for k, v in self.collect_only.items()}})
 
     @property
     def tradable(self) -> list[str]:
@@ -47,6 +52,14 @@ class BacktestConfig(BaseModel):
     def cost_rate(self) -> float:
         """편도 비용률 (5bp → 0.0005)."""
         return self.cost_bps / 10_000.0
+
+
+def _unique(groups: dict[str, list[str]]) -> list[str]:
+    seen: dict[str, None] = {}
+    for members in groups.values():
+        for ticker in members:
+            seen.setdefault(ticker, None)
+    return list(seen)
 
 
 def load_universe(config_dir: Path) -> UniverseConfig:

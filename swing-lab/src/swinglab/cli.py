@@ -27,6 +27,7 @@ from swinglab.paper.report import (
 )
 from swinglab.pipeline.calendar import last_completed_session, nyse_sessions
 from swinglab.pipeline.clean import run_checks
+from swinglab.pipeline.fx import ingest_fx
 from swinglab.pipeline.ingest import ingest as run_ingest
 from swinglab.pipeline.storage import clean_path, read_prices
 from swinglab.reports import metrics_table, run_cost_scenarios, write_report
@@ -41,6 +42,7 @@ from swinglab.research.selection import (
     select_all,
     write_candidates,
 )
+from swinglab.sources.fred_source import FredSource
 from swinglab.sources.yfinance_source import YFinanceSource
 from swinglab.strategies import STRATEGY_NAMES, build_strategy
 
@@ -74,13 +76,16 @@ def ingest(
     config_dir: Path = ConfigDir,
     data_dir: Path = DataDir,
 ) -> None:
-    """ETF 일봉을 수집해 data/raw, data/clean/prices.parquet에 저장한다."""
+    """ETF 일봉과 환율을 수집해 data/raw, data/clean/(prices, fx).parquet에 저장한다."""
     universe = load_universe(config_dir)
-    selected = [t.strip().upper() for t in tickers.split(",")] if tickers else universe.tickers
+    selected = [t.strip().upper() for t in tickers.split(",")] if tickers else universe.collect_tickers
     end_date = date.fromisoformat(end) if end else last_completed_session()
     typer.echo(f"수집: {len(selected)}종목, {universe.start} ~ {end_date}{' (전체 재수집)' if full else ''}")
 
-    report = run_ingest(selected, YFinanceSource(), universe.start, end_date, data_dir, full=full)
+    report = run_ingest(
+        selected, YFinanceSource(), universe.start, end_date, data_dir, full=full,
+        clean_tickers=universe.collect_tickers,
+    )
 
     rows = [
         {
@@ -99,8 +104,18 @@ def ingest(
     if report.clean_rows:
         quality = _quality_report(data_dir)
         typer.echo(f"품질 점검: 이슈 {quality.issue_count}건 (자세히: swinglab check)")
-    if report.failed:
-        typer.echo(f"실패 {len(report.failed)}종목: {', '.join(r.ticker for r in report.failed)}", err=True)
+
+    fx_failed = []
+    if universe.fx and not tickers:
+        for r in ingest_fx(universe.fx, FredSource(), universe.start, end_date, data_dir):
+            if r.error:
+                fx_failed.append(r.pair)
+                typer.echo(f"환율 {r.pair} ({r.series_id}) 실패: {r.error}", err=True)
+            else:
+                typer.echo(f"환율 {r.pair} ({r.series_id}): {r.rows:,}행, {r.first_date} ~ {r.last_date}")
+    if report.failed or fx_failed:
+        if report.failed:
+            typer.echo(f"실패 {len(report.failed)}종목: {', '.join(r.ticker for r in report.failed)}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -260,8 +275,10 @@ def paper_run(
     universe = load_universe(config_dir)
     failed: list[str] = []
     if do_ingest:
+        # 페이퍼에 필요한 0단계 유니버스만 수집하고, 정제본은 수집 대상 전체로 만든다
         report = run_ingest(
-            universe.tickers, YFinanceSource(), universe.start, last_completed_session(), data_dir
+            universe.tickers, YFinanceSource(), universe.start, last_completed_session(), data_dir,
+            clean_tickers=universe.collect_tickers,
         )
         failed = [r.ticker for r in report.failed]
         typer.echo(f"수집: {len(report.results)}종목, 실패 {len(failed)}{' (' + ', '.join(failed) + ')' if failed else ''}")

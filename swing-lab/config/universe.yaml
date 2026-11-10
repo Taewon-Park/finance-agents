@@ -10,3 +10,11 @@ groups:
   sector_late: [XLRE, XLC]          # XLRE 2015년, XLC 2018년 상장
   semiconductor: [SMH, SOXX]
   bond_gold: [TLT, IEF, GLD]        # 위험자산과의 관계 확인용
+
+# 2단계 자산배분용: 수집만 하고 0·1단계 매매 전략 대상(위 groups)에는 넣지 않는다.
+collect_only:
+  alloc: [EFA, EEM, BIL]            # 선진국 주식, 신흥국 주식, 단기 국채(현금 대용)
+
+# 환율 (FRED). 세금 계산과 원화 환산에 쓴다. 값은 1달러당 원.
+fx:
+  USDKRW: DEXKOUS
