@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -171,7 +171,7 @@ def candidates_document(
 ) -> dict[str, Any]:
     specs = [s.candidate for s in selections.values() if s.candidate is not None]
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "generated_from_commit": commit,
         "selection_cost_bps": cfg.selection_cost_bps,
         "candidates_hash": specs_hash(specs),

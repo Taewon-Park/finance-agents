@@ -6,8 +6,8 @@ from datetime import date
 
 import pandas as pd
 import pytest
-
 from conftest import random_walk_prices
+
 from swinglab.backtest.crosscheck import PublishedReturn, buy_hold_crosscheck
 
 

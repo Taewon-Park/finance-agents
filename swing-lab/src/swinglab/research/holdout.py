@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -81,7 +81,7 @@ def run_holdout(
     commit = git_commit(repo_dir)
     entry = {
         "candidates_hash": digest,
-        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
         "git_commit": commit,
         "forced": bool(force),
         "candidates_file": str(candidates_file),

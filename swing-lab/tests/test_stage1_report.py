@@ -6,15 +6,20 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
 from conftest import random_walk_prices
+
 from swinglab.config import BacktestConfig, UniverseConfig
 from swinglab.reports.stage1 import write_stage1_report
 from swinglab.research.config import Stage1Config
 from swinglab.research.holdout import run_holdout
 from swinglab.research.log import read_log
 from swinglab.research.runner import run_train
-from swinglab.research.selection import candidates_document, read_candidates, select_all, write_candidates
+from swinglab.research.selection import (
+    candidates_document,
+    read_candidates,
+    select_all,
+    write_candidates,
+)
 
 UNIVERSE = UniverseConfig(
     benchmark="SPY", start="2016-01-01", groups={"b": ["SPY"], "x": ["AAA", "BBB", "CCC"], "safe": ["IEF", "TLT"]}

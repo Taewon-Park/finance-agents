@@ -58,7 +58,7 @@ class YFinanceSource:
                     timeout=self.timeout_seconds,
                     multi_level_index=False,
                 )
-            except Exception as exc:  # 네트워크·파싱 오류 모두 재시도 대상
+            except Exception as exc:  # noqa: BLE001 - 네트워크·파싱 오류 모두 재시도 대상
                 last_error = f"{type(exc).__name__}: {exc}"
             else:
                 if raw is not None and not raw.empty:

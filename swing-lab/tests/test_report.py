@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from conftest import random_walk_prices
+
 from swinglab.config import BacktestConfig
 from swinglab.reports import metrics_table, run_cost_scenarios, write_report
 from swinglab.strategies import SmaCross

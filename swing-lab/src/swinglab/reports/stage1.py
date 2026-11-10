@@ -19,13 +19,31 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from swinglab.backtest.metrics import drawdown
+from swinglab.reports.report import (
+    GRID,
+    INK_MUTED,
+    INK_PRIMARY,
+    INK_SECONDARY,
+    SURFACE,
+    render_page,
+)
 from swinglab.research.config import Stage1Config
 from swinglab.research.holdout import read_lock
-from swinglab.research.log import BASELINE_FAMILY, latest_runs, read_log, summarize, trial_keys
+from swinglab.research.log import (
+    BASELINE_FAMILY,
+    latest_runs,
+    read_log,
+    summarize,
+    trial_keys,
+)
 from swinglab.research.runner import benchmarks_path, read_curves
-from swinglab.research.selection import IncompleteExperiments, read_candidates, read_candidates_document, select_all
+from swinglab.research.selection import (
+    IncompleteExperiments,
+    read_candidates,
+    read_candidates_document,
+    select_all,
+)
 from swinglab.research.specs import StrategySpec
-from swinglab.reports.report import GRID, INK_MUTED, INK_PRIMARY, INK_SECONDARY, SURFACE, render_page
 
 # dataviz 기본 팔레트 범주 슬롯 순서 (라이트). 벤치마크는 회색 잉크.
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]

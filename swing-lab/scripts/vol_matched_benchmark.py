@@ -21,7 +21,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from swinglab.backtest.metrics import annual_volatility, cagr, daily_returns, max_drawdown, sharpe_ratio
+from swinglab.backtest.metrics import (
+    annual_volatility,
+    cagr,
+    daily_returns,
+    max_drawdown,
+    sharpe_ratio,
+)
 from swinglab.research.config import load_stage1
 from swinglab.research.holdout import read_lock
 from swinglab.research.log import latest_runs, read_log

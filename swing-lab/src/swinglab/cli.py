@@ -27,7 +27,12 @@ from swinglab.research.config import load_stage1
 from swinglab.research.holdout import HoldoutRefused, run_holdout
 from swinglab.research.log import BudgetExceeded, git_commit, read_log, summarize
 from swinglab.research.runner import run_train
-from swinglab.research.selection import IncompleteExperiments, candidates_document, select_all, write_candidates
+from swinglab.research.selection import (
+    IncompleteExperiments,
+    candidates_document,
+    select_all,
+    write_candidates,
+)
 from swinglab.sources.yfinance_source import YFinanceSource
 from swinglab.strategies import STRATEGY_NAMES, build_strategy
 
@@ -189,8 +194,8 @@ def experiments_select(
     for fam, sel in selections.items():
         c = sel.candidate
         typer.echo(f"{fam}: {c.display_name + ' ' + c.params_json if c else '후보 없음'}")
-        for note in sel.notes:
-            typer.echo(f"    {note}")
+        for line in sel.notes:
+            typer.echo(f"    {line}")
     typer.echo(f"\n저장: {output}. 커밋한 뒤 swinglab holdout --candidates {output}")
 
 

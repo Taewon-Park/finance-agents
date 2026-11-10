@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-
 from conftest import random_walk_prices
+
 from swinglab.config import BacktestConfig, UniverseConfig
 from swinglab.research import runner as runner_module
 from swinglab.research.config import Stage1Config, load_stage1

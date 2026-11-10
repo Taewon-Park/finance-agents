@@ -32,7 +32,16 @@ dev = [
     "nbclient>=0.11.0",
     "nbformat>=5.11.1",
     "pytest>=9.2.0",
+    "ruff>=0.17.4",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint.per-file-ignores]
+# typer는 인자 기본값에 typer.Option(...)을 쓰는 것이 표준 사용법
+"src/swinglab/cli.py" = ["B008"]
+"*.ipynb" = ["F401", "RUF007"]

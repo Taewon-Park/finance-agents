@@ -8,8 +8,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from swinglab.backtest.engine import OPEN_POSITION_COLUMNS, TRADE_COLUMNS, BacktestResult
-from swinglab.backtest.metrics import cagr, max_drawdown, performance_metrics, sharpe_ratio
+from swinglab.backtest.engine import (
+    OPEN_POSITION_COLUMNS,
+    TRADE_COLUMNS,
+    BacktestResult,
+)
+from swinglab.backtest.metrics import (
+    cagr,
+    max_drawdown,
+    performance_metrics,
+    sharpe_ratio,
+)
 
 
 def test_cagr_two_calendar_years() -> None:

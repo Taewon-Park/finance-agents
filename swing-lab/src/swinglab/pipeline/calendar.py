@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 
 import exchange_calendars as xcals
@@ -27,7 +27,7 @@ def last_completed_session(now: datetime | None = None, buffer_minutes: int = 30
 
     장중에 수집하면 당일 봉이 미완성이므로 저장하지 않기 위해 쓴다.
     """
-    now_utc = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    now_utc = (now or datetime.now(UTC)).astimezone(UTC)
     cal = _nyse()
     candidates = cal.sessions_in_range(
         pd.Timestamp(now_utc.date() - timedelta(days=14)), pd.Timestamp(now_utc.date())

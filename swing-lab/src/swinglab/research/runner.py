@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -17,7 +17,14 @@ from swinglab.backtest.engine import BacktestResult, run_backtest
 from swinglab.backtest.metrics import performance_metrics
 from swinglab.config import BacktestConfig, UniverseConfig
 from swinglab.research.config import Period, Stage1Config
-from swinglab.research.log import BASELINE_FAMILY, write_atomic, append_rows, check_budget, git_commit, read_log
+from swinglab.research.log import (
+    BASELINE_FAMILY,
+    append_rows,
+    check_budget,
+    git_commit,
+    read_log,
+    write_atomic,
+)
 from swinglab.research.selection import filter_pairs, select_grid_family
 from swinglab.research.specs import StrategySpec
 from swinglab.strategies import BuyAndHold
@@ -181,7 +188,7 @@ def _metric_columns(m: dict[str, float]) -> dict[str, float]:
 def _log_row(run_id: str, commit: str, spec: StrategySpec, period: str, cost: float, result: BacktestResult) -> dict:
     return {
         "run_id": run_id,
-        "timestamp": datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+        "timestamp": datetime.now(UTC).isoformat(timespec="microseconds"),
         "git_commit": commit,
         "family": spec.family,
         "strategy": spec.display_name,
