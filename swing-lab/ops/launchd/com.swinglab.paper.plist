@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 2단계 페이퍼 트레이딩: 매일 07:00(맥 현지 시간, KST) swinglab paper run.
+     경로는 main 체크아웃(/Users/taylor/Projects/finance-agents/swing-lab) 기준. 등록·해제는 swing-lab/README.md 참고. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.swinglab.paper</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd /Users/taylor/Projects/finance-agents/swing-lab &amp;&amp; /Users/taylor/.local/bin/uv run swinglab paper run</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/taylor/Projects/finance-agents/swing-lab/paper/logs/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/taylor/Projects/finance-agents/swing-lab/paper/logs/launchd.log</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
