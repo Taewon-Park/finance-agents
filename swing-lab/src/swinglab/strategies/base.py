@@ -9,12 +9,18 @@
   그래서 강도를 진입 조건이 성립한 날에만 주면 늦은 진입이 생기지 않는다 (RSI 전략).
 - max_positions: 동시 보유 수. None이면 백테스트 설정값을 쓴다 (바이앤홀드 = 1).
 - max_hold_days: 실제 진입일부터 센 최대 보유 거래일. 엔진이 강제 청산한다. None이면 제한 없음.
+
+선택 속성 (없으면 엔진 기본값, 1단계에서 추가):
+- rebalance: "daily"(기본) 또는 "monthly". monthly면 월 마지막 거래일 신호만 반영한다.
+- min_hold_days: 목표 0이어도 보유일이 이보다 짧으면 청산하지 않는다. None이면 제한 없음.
+- price_aliases: {"IEF#2": "IEF"}처럼 같은 종목을 여러 자리로 들 때의 별칭. 기본은 없음.
 """
 
 from __future__ import annotations
 
 from typing import Protocol
 
+import numpy as np
 import pandas as pd
 
 
@@ -45,3 +51,22 @@ def price_panel(prices: pd.DataFrame, field: str, tickers: list[str] | None = No
     if tickers is not None:
         panel = panel.reindex(columns=tickers)
     return panel
+
+
+def hold_state(entry: np.ndarray, exit_: np.ndarray, valid: np.ndarray) -> np.ndarray:
+    """청산 조건이면 0, 아니고 진입 조건이면 1, 둘 다 아니면 이전 상태 유지.
+
+    두 조건이 같은 날 성립하면 청산이 우선한다 (보유 중이든 아니든 같은 규칙).
+    데이터가 없는 날은 NaN이고 상태는 유지한다.
+    """
+    state = 0.0
+    out = np.full(len(entry), np.nan)
+    for i in range(len(entry)):
+        if not valid[i]:
+            continue
+        if exit_[i]:
+            state = 0.0
+        elif entry[i]:
+            state = 1.0
+        out[i] = state
+    return out

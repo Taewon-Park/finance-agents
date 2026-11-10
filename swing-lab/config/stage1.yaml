@@ -1,0 +1,47 @@
+# 1단계 실험 설정 (stage1-spec.md). 구간·예산·파라미터 후보·선정 규칙을 바꾸려면 스펙을 먼저 고친다.
+
+periods:
+  # 파라미터 탐색과 후보 선정. 성과는 evaluate_from부터 모든 전략이 같은 날짜로 집계한다
+  # (그 전은 워밍업). 가장 긴 워밍업(B lookback 12개월)이 끝난 뒤 첫 월초.
+  train: {start: 2010-01-01, end: 2018-12-31, evaluate_from: 2011-03-01}
+  holdout: {start: 2019-01-01, end: null}         # 최종 후보만, swinglab holdout으로만 실행
+
+cost_bps: [0, 5, 10]
+selection_cost_bps: 5
+
+budget:
+  per_family: 12
+  total: 50
+
+# 후보 선정 규칙 (실험 전에 고정, 결과를 보고 바꾸지 않는다)
+selection:
+  min_trades: 100              # 규칙 2: 학습 구간 총 거래 수 미만이면 제외
+  min_trades_exempt: [B]       # 월간 계열은 예외
+  isolation_ratio: 0.7         # 규칙 3: 인접 조합 샤프 평균 < 1순위 × 0.7 이면 고립된 봉우리
+  filter_min_sharpe_gain: 0.05 # 규칙 4: D 계열 필터 버전 채택 기준
+
+# 계열별 파라미터 후보. axes의 값이 매핑이면 그 키들을 한 번에 바꾼다 (C의 entry_n/exit_n 짝).
+# 인접 조합 = 축 하나만 한 칸 다른 조합.
+families:
+  A:
+    strategy: rsi2_v2
+    axes:
+      entry_th: [5, 10]
+      min_hold: [1, 3, 5]
+  B:
+    strategy: dual_momentum
+    universe: [XLK, XLF, XLV, XLE, XLI, XLY, XLP, XLU, XLB, XLRE, XLC]
+    fixed: {safe: IEF}
+    axes:
+      lookback: [6, 12]
+      top_n: [2, 3]
+  C:
+    strategy: breakout
+    axes:
+      channel:
+        - {entry_n: 20, exit_n: 10}
+        - {entry_n: 55, exit_n: 20}
+  D:
+    # A·C 학습 구간 후보와 0단계 sma_cross에 시장 필터를 씌운다. 필터 전 sma_cross는 baseline으로 기록.
+    wraps: [A, C]
+    extra: [sma_cross]

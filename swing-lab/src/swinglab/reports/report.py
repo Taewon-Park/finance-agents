@@ -167,7 +167,7 @@ def write_report(
 """
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{strategy.name}.html"
-    path.write_text(_page(f"{strategy.name} 백테스트", body), encoding="utf-8")
+    path.write_text(render_page(f"{strategy.name} 백테스트", body), encoding="utf-8")
     return path
 
 
@@ -231,7 +231,7 @@ def _fmt(value: float, kind: str, signed: bool = False) -> str:
     raise ValueError(kind)
 
 
-def _page(title: str, body: str) -> str:
+def render_page(title: str, body: str) -> str:
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -256,7 +256,7 @@ def _page(title: str, body: str) -> str:
   .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 16px; margin: 12px 0 0; }}
   .meta div {{ display: flex; gap: 8px; }}
   .meta dt {{ color: var(--muted); min-width: 64px; }}
-  .meta dd {{ margin: 0; }}
+  .meta dd {{ margin: 0; overflow-wrap: anywhere; }}
   table {{ border-collapse: collapse; font-variant-numeric: tabular-nums; }}
   th, td {{ padding: 6px 10px; border-bottom: 1px solid var(--grid); text-align: right; white-space: nowrap; }}
   th {{ color: var(--ink-2); font-weight: 600; }}
