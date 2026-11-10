@@ -77,6 +77,24 @@ uv run swinglab rebalance --contribution 3000000   # private/holdings.csv → pr
 - `rebalance`는 실제 계좌와 연결하지 않는다. 보유 내역·결과 문서는 `private/` 아래에만 둔다 (git 제외).
 - `paper/`, `private/`는 git에 넣지 않는다.
 
+### 페이퍼 자동 실행 (launchd)
+
+`ops/launchd/com.swinglab.paper.plist`: 매일 07:00(맥 현지 시간)에 main 체크아웃에서 `uv run swinglab paper run`. 로그는 `paper/logs/launchd.log`. `RunAtLoad`가 꺼져 있어 등록 직후에는 돌지 않고, 첫 자동 실행일이 페이퍼 시작일이 된다. 맥이 잠자기 중이면 깨어날 때 한 번 실행되고, 꺼져 있던 날은 다음 실행에서 순서대로 처리된다.
+
+```bash
+# 등록 (main 체크아웃의 swing-lab/에서)
+mkdir -p paper/logs
+cp ops/launchd/com.swinglab.paper.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.swinglab.paper.plist
+launchctl print gui/$(id -u)/com.swinglab.paper      # 상태 확인
+
+# 해제
+launchctl bootout gui/$(id -u)/com.swinglab.paper
+rm ~/Library/LaunchAgents/com.swinglab.paper.plist
+```
+
+plist를 고친 뒤에는 해제 → 다시 복사 → 등록 순서로 바꾼다. 경로(`/Users/taylor/Projects/finance-agents/swing-lab`, uv 위치)가 다르면 plist를 먼저 고친다.
+
 ## 검증 기록
 
 - `notebooks/manual_check.ipynb`: RSI(2) 거래 무작위 5건을 엔진과 독립된 계산으로 대조
