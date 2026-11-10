@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import numpy as np
@@ -148,11 +148,11 @@ def test_nyse_calendar_knows_special_closures() -> None:
 
 def test_last_completed_session_excludes_open_market() -> None:
     # 2024-01-08(월) 10:00 ET 장중 → 직전 금요일
-    assert last_completed_session(datetime(2024, 1, 8, 15, 0, tzinfo=timezone.utc)) == date(2024, 1, 5)
+    assert last_completed_session(datetime(2024, 1, 8, 15, 0, tzinfo=UTC)) == date(2024, 1, 5)
     # 같은 날 17:00 ET(마감 + 1시간) → 당일
-    assert last_completed_session(datetime(2024, 1, 8, 22, 0, tzinfo=timezone.utc)) == date(2024, 1, 8)
+    assert last_completed_session(datetime(2024, 1, 8, 22, 0, tzinfo=UTC)) == date(2024, 1, 8)
     # 토요일 → 금요일
-    assert last_completed_session(datetime(2024, 1, 6, 18, 0, tzinfo=timezone.utc)) == date(2024, 1, 5)
+    assert last_completed_session(datetime(2024, 1, 6, 18, 0, tzinfo=UTC)) == date(2024, 1, 5)
 
 
 def test_yfinance_source_normalizes_and_retries(monkeypatch: pytest.MonkeyPatch) -> None:

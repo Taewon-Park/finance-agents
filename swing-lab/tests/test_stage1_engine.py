@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-
 from conftest import FixedStrategy, make_prices, trading_dates
+
 from swinglab.backtest import run_backtest
 from swinglab.config import BacktestConfig
 from swinglab.strategies import MarketFilter

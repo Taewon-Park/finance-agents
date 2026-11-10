@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-
 from conftest import make_prices, random_walk_prices
+
 from swinglab.backtest import run_backtest
 from swinglab.config import BacktestConfig
 from swinglab.indicators import period_return, prior_high, prior_low

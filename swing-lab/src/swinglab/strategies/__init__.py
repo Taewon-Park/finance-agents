@@ -46,17 +46,17 @@ def build_parametrized(
 
 
 __all__ = [
+    "SECTOR_ETFS",
     "STRATEGY_NAMES",
     "Breakout",
     "BuyAndHold",
     "DualMomentum",
     "MarketFilter",
-    "Rsi2Swing",
-    "SECTOR_ETFS",
-    "build_parametrized",
     "Rsi2Pullback",
+    "Rsi2Swing",
     "SmaCross",
     "Strategy",
+    "build_parametrized",
     "build_strategy",
     "price_panel",
 ]

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-
 from conftest import make_prices, trading_dates
+
 from swinglab.config import UniverseConfig
 from swinglab.strategies import BuyAndHold, Rsi2Pullback, SmaCross, build_strategy
 from swinglab.strategies.rsi2_pullback import _hold_state
