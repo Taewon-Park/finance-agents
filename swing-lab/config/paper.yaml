@@ -1,0 +1,27 @@
+# 2단계 트랙 1: 페이퍼 트레이딩 (stage2-spec.md)
+# 이 파일의 내용과 source_files의 해시는 첫 실행 때 paper/frozen.json에 고정된다.
+# 고정 뒤에는 한 글자라도 바뀌면 swinglab paper run이 거부한다 (주석·공백은 해시에 들어가지 않음).
+# 바꿔야 하면 paper_id를 새로 정한다. 기존 계정의 기록은 그대로 남는다.
+
+paper_id: p1
+initial_capital: 100000    # 전략(계정)마다 따로
+cost_bps: 5                # 편도
+max_positions: 5           # 전략이 따로 정하지 않을 때 (두 전략 모두 5)
+
+# 1단계와 같은 유니버스 19종 (0단계 universe.yaml에서 벤치마크 SPY를 뺀 목록)
+tickers: [QQQ, IWM, DIA, XLK, XLF, XLV, XLE, XLI, XLY, XLP, XLU, XLB, XLRE, XLC, SMH, SOXX, TLT, IEF, GLD]
+benchmark: SPY             # 리포트 비교용
+
+# 1단계 후보 그대로 (config/candidates.yaml의 C, A)
+strategies:
+  C: {strategy: breakout, params: {entry_n: 20, exit_n: 10}}
+  A: {strategy: rsi2_v2, params: {entry_th: 5, min_hold: 5}}
+
+# 해시를 고정할 전략 소스 (swing-lab 기준 경로)
+source_files:
+  - src/swinglab/strategies/base.py
+  - src/swinglab/strategies/breakout.py
+  - src/swinglab/strategies/rsi2_swing.py
+  - src/swinglab/indicators/channel.py
+  - src/swinglab/indicators/moving_average.py
+  - src/swinglab/indicators/rsi.py

@@ -10,13 +10,21 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
 import typer
 
 from swinglab.config import load_backtest_config, load_universe
+from swinglab.paper import PaperBusy, PaperRefused, load_paper_config, run_paper
+from swinglab.paper.config import read_frozen
+from swinglab.paper.report import (
+    report_text,
+    summarize_accounts,
+    weekly_line,
+    write_weekly,
+)
 from swinglab.pipeline.calendar import last_completed_session, nyse_sessions
 from swinglab.pipeline.clean import run_checks
 from swinglab.pipeline.ingest import ingest as run_ingest
@@ -39,8 +47,11 @@ from swinglab.strategies import STRATEGY_NAMES, build_strategy
 app = typer.Typer(help="미국 섹터 ETF 스윙 백테스트", no_args_is_help=True, add_completion=False)
 experiments_app = typer.Typer(help="1단계 학습 구간 실험 (검증 구간은 holdout 명령으로만)", no_args_is_help=True)
 report_app = typer.Typer(help="단계별 리포트", no_args_is_help=True)
+paper_app = typer.Typer(help="2단계 페이퍼 트레이딩 (설정 고정, 매일 실행)", no_args_is_help=True)
 app.add_typer(experiments_app, name="experiments")
 app.add_typer(report_app, name="report")
+app.add_typer(paper_app, name="paper")
+PaperDir = typer.Option(Path("paper"), "--paper-dir", help="페이퍼 기록 위치 (git 제외)")
 
 ResultsDir = typer.Option(Path("results"), "--results-dir", help="실험 로그·자산곡선·검증 잠금 위치")
 CandidatesFile = Path("config/candidates.yaml")
@@ -234,6 +245,63 @@ def report_stage1(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     typer.echo(f"리포트: {path}")
+
+
+@paper_app.command("run")
+def paper_run(
+    do_ingest: bool = typer.Option(True, "--ingest/--no-ingest", help="처리 전에 증분 수집 (launchd 실행은 기본값)"),
+    config_dir: Path = ConfigDir,
+    data_dir: Path = DataDir,
+    paper_dir: Path = PaperDir,
+) -> None:
+    """증분 수집 → 고정 확인 → 놓친 거래일까지 하루씩 체결·평가·다음 주문 (같은 날은 다시 처리하지 않음)."""
+    typer.echo(f"[{datetime.now().astimezone().isoformat(timespec='seconds')}] paper run")
+    cfg = load_paper_config(config_dir)
+    universe = load_universe(config_dir)
+    failed: list[str] = []
+    if do_ingest:
+        report = run_ingest(
+            universe.tickers, YFinanceSource(), universe.start, last_completed_session(), data_dir
+        )
+        failed = [r.ticker for r in report.failed]
+        typer.echo(f"수집: {len(report.results)}종목, 실패 {len(failed)}{' (' + ', '.join(failed) + ')' if failed else ''}")
+    prices = _load_prices(data_dir)
+    try:
+        result = run_paper(cfg, prices, universe, paper_dir, Path.cwd(), git_commit(Path.cwd()))
+    except (PaperRefused, PaperBusy, ValueError) as exc:
+        typer.echo(f"실행 거부: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    if result.frozen_created:
+        typer.echo(f"새 페이퍼 계정 {cfg.paper_id}: 시작일 {result.start_date}, 고정 기록 {paper_dir / 'frozen.json'}")
+    for acct in result.accounts:
+        days = f"{acct.processed[0]} ~ {acct.processed[-1]} ({len(acct.processed)}일)" if acct.processed else "없음"
+        typer.echo(
+            f"{acct.account}: 처리 {days}, 마지막 {acct.last_processed}, 자산 {acct.equity:,.2f}, "
+            f"보유 {acct.n_positions}, 다음 시가 주문 후보 {acct.pending_orders}"
+        )
+    key, line = weekly_line(cfg, summarize_accounts(cfg, paper_dir, prices))
+    if line:
+        write_weekly(paper_dir, key, line)
+        typer.echo(line)
+    if failed:
+        typer.echo("일부 종목 수집 실패: 모든 대상 종목의 데이터가 있는 날까지만 처리했습니다.", err=True)
+        raise typer.Exit(code=1)
+
+
+@paper_app.command("report")
+def paper_report(config_dir: Path = ConfigDir, data_dir: Path = DataDir, paper_dir: Path = PaperDir) -> None:
+    """시작일 이후 누적 지표, 같은 기간 SPY 바이앤홀드, 변동성 맞춤 SPY 혼합 비교."""
+    cfg = load_paper_config(config_dir)
+    entry = read_frozen(paper_dir).get(cfg.paper_id)
+    if entry is None:
+        typer.echo(f"페이퍼 계정 {cfg.paper_id}의 기록이 없습니다. 먼저 swinglab paper run을 실행하세요.", err=True)
+        raise typer.Exit(code=1)
+    summaries = summarize_accounts(cfg, paper_dir, _load_prices(data_dir))
+    typer.echo(report_text(cfg, summaries, entry["start_date"]))
+    key, line = weekly_line(cfg, summaries)
+    if line:
+        write_weekly(paper_dir, key, line)
+        typer.echo(f"\n주간 요약: {line}")
 
 
 def _load_prices(data_dir: Path) -> pd.DataFrame:
