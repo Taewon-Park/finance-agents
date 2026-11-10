@@ -62,6 +62,21 @@ uv run swinglab report stage1               # reports/stage1.html (results/ 파�
 - 규칙 3: 1순위의 인접 조합 샤프 평균 < 1순위 × 0.7이면 고립, '자기+인접' 평균 최고 조합 선택. 1순위 샤프 ≤ 0이면 생략.
 - D: 필터 버전이 필터 전보다 샤프 0.05 이상 높은 것 중 최고 1개. 필터 전 sma_cross는 baseline으로 기록, 시도 수 제외.
 
+## 2단계: 페이퍼 트레이딩 + 분기 리밸런싱 (`../stage2-spec.md`)
+
+```bash
+uv run swinglab ingest                      # 0단계 20종 + EFA·EEM·BIL(collect_only) + 원/달러 환율(FRED DEXKOUS)
+uv run swinglab paper run                   # 매일 1회 (launchd). 수집 → 고정 확인 → 놓친 거래일까지 하루씩 처리
+uv run swinglab paper report                # 시작일 이후 누적 지표, 같은 기간 SPY, 변동성 맞춤 SPY 혼합
+uv run swinglab alloc backtest              # P0~P3 × 0/5/10bp (서술용) → reports/stage2_alloc.html, .md
+uv run swinglab rebalance --contribution 3000000   # private/holdings.csv → private/rebalance/<YYYY-Qn>.md
+```
+
+- 페이퍼: `config/paper.yaml`(C breakout 20/10, A rsi2_v2 (5, 5))과 전략 소스 해시를 첫 실행 때 `paper/frozen.json`에 고정한다. 다르면 거부하고, 바꾸려면 `paper_id`를 새로 정한다. 첫 실행일이 시작일이다.
+- 배분: `config/alloc.yaml`. 커밋된 상태에서만 `alloc backtest`가 돈다. 실험 로그에는 `family=alloc`, 시도는 정책 4개까지.
+- `rebalance`는 실제 계좌와 연결하지 않는다. 보유 내역·결과 문서는 `private/` 아래에만 둔다 (git 제외).
+- `paper/`, `private/`는 git에 넣지 않는다.
+
 ## 검증 기록
 
 - `notebooks/manual_check.ipynb`: RSI(2) 거래 무작위 5건을 엔진과 독립된 계산으로 대조
