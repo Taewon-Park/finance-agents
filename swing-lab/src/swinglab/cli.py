@@ -155,7 +155,7 @@ def experiments_run(
             family.upper(), _load_prices(data_dir), load_universe(config_dir), load_backtest_config(config_dir),
             cfg, results_dir, Path.cwd(),
         )
-    except (BudgetExceeded, IncompleteExperiments, ValueError) as exc:
+    except (BudgetExceeded, IncompleteExperiments, ValueError, TypeError) as exc:
         typer.echo(f"실행 거부: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     cols = ["family", "strategy", "params", "cost_bp", "sharpe", "cagr", "mdd", "n_trades", "window_start", "window_end"]
