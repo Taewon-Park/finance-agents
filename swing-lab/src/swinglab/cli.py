@@ -16,6 +16,15 @@ from pathlib import Path
 import pandas as pd
 import typer
 
+from swinglab.alloc.backtest import AllocRefused, run_all
+from swinglab.alloc.config import load_alloc_config
+from swinglab.alloc.rebalance import (
+    load_holdings,
+    plan_rebalance,
+    render_plan,
+    write_plan,
+)
+from swinglab.alloc.summary import checked_summary, request_summary
 from swinglab.config import load_backtest_config, load_universe
 from swinglab.paper import PaperBusy, PaperRefused, load_paper_config, run_paper
 from swinglab.paper.config import read_frozen
@@ -27,10 +36,11 @@ from swinglab.paper.report import (
 )
 from swinglab.pipeline.calendar import last_completed_session, nyse_sessions
 from swinglab.pipeline.clean import run_checks
-from swinglab.pipeline.fx import ingest_fx
+from swinglab.pipeline.fx import ingest_fx, read_fx
 from swinglab.pipeline.ingest import ingest as run_ingest
 from swinglab.pipeline.storage import clean_path, read_prices
 from swinglab.reports import metrics_table, run_cost_scenarios, write_report
+from swinglab.reports.alloc import goal_verdict, metrics_frame, write_alloc_report
 from swinglab.reports.stage1 import write_stage1_report
 from swinglab.research.config import load_stage1
 from swinglab.research.holdout import HoldoutRefused, run_holdout
@@ -50,9 +60,11 @@ app = typer.Typer(help="미국 섹터 ETF 스윙 백테스트", no_args_is_help=
 experiments_app = typer.Typer(help="1단계 학습 구간 실험 (검증 구간은 holdout 명령으로만)", no_args_is_help=True)
 report_app = typer.Typer(help="단계별 리포트", no_args_is_help=True)
 paper_app = typer.Typer(help="2단계 페이퍼 트레이딩 (설정 고정, 매일 실행)", no_args_is_help=True)
+alloc_app = typer.Typer(help="2단계 자산배분 P0~P3 백테스트 (서술용)", no_args_is_help=True)
 app.add_typer(experiments_app, name="experiments")
 app.add_typer(report_app, name="report")
 app.add_typer(paper_app, name="paper")
+app.add_typer(alloc_app, name="alloc")
 PaperDir = typer.Option(Path("paper"), "--paper-dir", help="페이퍼 기록 위치 (git 제외)")
 
 ResultsDir = typer.Option(Path("results"), "--results-dir", help="실험 로그·자산곡선·검증 잠금 위치")
@@ -319,6 +331,71 @@ def paper_report(config_dir: Path = ConfigDir, data_dir: Path = DataDir, paper_d
     if line:
         write_weekly(paper_dir, key, line)
         typer.echo(f"\n주간 요약: {line}")
+
+
+@alloc_app.command("backtest")
+def alloc_backtest(
+    config_dir: Path = ConfigDir,
+    data_dir: Path = DataDir,
+    results_dir: Path = ResultsDir,
+    reports_dir: Path = ReportsDir,
+    offline: bool = typer.Option(False, "--offline", help="plotly.js를 HTML에 포함"),
+) -> None:
+    """P0~P3 × 비용 0/5/10bp 백테스트 → 실험 로그(family=alloc) + reports/stage2_alloc.html, .md."""
+    cfg = load_alloc_config(config_dir)
+    prices = _load_prices(data_dir)
+    try:
+        fx = read_fx(data_dir, cfg.tax.fx_pair)
+        runs = run_all(prices, fx, cfg, results_dir, Path.cwd(), git_commit(Path.cwd()))
+    except (AllocRefused, BudgetExceeded, FileNotFoundError, ValueError) as exc:
+        typer.echo(f"실행 거부: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    html_path, md_path = write_alloc_report(
+        runs, cfg, reports_dir, prices["date"].max().date(), fx.index.max().date(), offline=offline
+    )
+    rep = cfg.backtest.report_cost_bps
+    typer.echo(md_path.read_text(encoding="utf-8").splitlines()[0])
+    typer.echo(goal_verdict(runs, cfg))
+    typer.echo(f"\n{rep:g}bp\n" + metrics_frame(runs, rep).to_string(index=False))
+    typer.echo(f"\n리포트: {html_path}, {md_path}")
+
+
+@app.command()
+def rebalance(
+    holdings: Path | None = typer.Option(None, "--holdings", help="보유 내역 CSV (기본: alloc.yaml live.holdings)"),
+    contribution: int = typer.Option(0, "--contribution", min=0, help="이번 분기 신규 납입액 (원)"),
+    realized_ytd: int = typer.Option(0, "--realized-ytd", help="올해 이미 실현한 해외주식 차익 (원, 세액 추정용)"),
+    policy: str | None = typer.Option(None, "--policy", help="정책 (기본: alloc.yaml live.policy)"),
+    output_dir: Path | None = typer.Option(None, "--output-dir", help="문서 저장 위치 (기본: live.output_dir)"),
+    llm: bool | None = typer.Option(None, "--llm/--no-llm", help="로컬 LLM 요약 (기본: alloc.yaml llm.enabled)"),
+    config_dir: Path = ConfigDir,
+    data_dir: Path = DataDir,
+) -> None:
+    """분기 리밸런싱 주문 목록 문서 (<YYYY-Qn>.md). 계좌와 연결하지 않으며 주문은 사람이 직접 한다."""
+    cfg = load_alloc_config(config_dir)
+    holdings_path = holdings or cfg.live.holdings
+    out_dir = output_dir or cfg.live.output_dir
+    try:
+        plan = plan_rebalance(
+            load_holdings(holdings_path), _load_prices(data_dir), read_fx(data_dir, cfg.tax.fx_pair), cfg,
+            policy_name=policy, contribution_krw=contribution, realized_ytd_krw=realized_ytd,
+        )
+    except (FileNotFoundError, ValueError, KeyError) as exc:
+        typer.echo(f"실행 거부: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    if plan.as_of.date() < last_completed_session():
+        typer.echo(f"주의: 가격 기준일 {plan.as_of.date()}이 마감된 최근 거래일보다 앞입니다 (swinglab ingest 필요).", err=True)
+    text = render_plan(plan)
+    summary_note = ""
+    summary = None
+    if llm if llm is not None else cfg.llm.enabled:
+        raw, err = request_summary(text, cfg.llm)
+        summary, summary_note = checked_summary(raw, text) if raw is not None else (None, err)
+    text = render_plan(plan, summary, summary_note)
+    path = write_plan(text, plan, out_dir)
+    typer.echo(f"{plan.quarter_label} 정책 {plan.policy}, 기준일 {plan.as_of.date()}: 주문 {len(plan.orders)}건, "
+               f"예상 세액 증가 {plan.tax['tax_increase_krw']:,}원")
+    typer.echo(f"문서: {path}")
 
 
 def _load_prices(data_dir: Path) -> pd.DataFrame:
