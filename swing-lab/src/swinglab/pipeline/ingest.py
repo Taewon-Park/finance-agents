@@ -55,7 +55,13 @@ def ingest(
     end: date,
     data_dir: Path,
     full: bool = False,
+    clean_tickers: list[str] | None = None,
 ) -> IngestReport:
+    """tickers를 수집하고 정제본을 다시 만든다.
+
+    정제본은 clean_tickers(없으면 tickers)의 원본 전체로 만든다. 일부 종목만 수집할 때
+    정제본에서 나머지 종목이 빠지지 않도록 호출하는 쪽에서 수집 대상 전체를 넘긴다.
+    """
     report = IngestReport()
     for ticker in tickers:
         try:
@@ -64,7 +70,7 @@ def ingest(
             result = TickerIngestResult(ticker=ticker, mode="failed", message=str(exc))
         report.results.append(result)
 
-    report.clean_file, report.clean_rows = build_clean(tickers, source.name, data_dir)
+    report.clean_file, report.clean_rows = build_clean(clean_tickers or tickers, source.name, data_dir)
     return report
 
 
