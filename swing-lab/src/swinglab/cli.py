@@ -194,8 +194,8 @@ def experiments_select(
     for fam, sel in selections.items():
         c = sel.candidate
         typer.echo(f"{fam}: {c.display_name + ' ' + c.params_json if c else '후보 없음'}")
-        for note in sel.notes:
-            typer.echo(f"    {note}")
+        for line in sel.notes:
+            typer.echo(f"    {line}")
     typer.echo(f"\n저장: {output}. 커밋한 뒤 swinglab holdout --candidates {output}")
 
 

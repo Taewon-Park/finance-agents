@@ -34,7 +34,7 @@ def test_period_return_and_missing_days() -> None:
 def test_rsi2_swing_target_and_strength() -> None:
     prices = random_walk_prices(["AAA", "BBB"], 500, seed=3, drift=0.0008, vol=0.02)
     s = Rsi2Swing(tickers=["AAA", "BBB"], entry_th=10, min_hold=3)
-    rsi, entry, exit_, valid = s._components(prices)
+    _, entry, exit_, valid = s._components(prices)
     target, strength = s.generate(prices), s.strength(prices)
     assert s.min_hold_days == 3 and s.max_hold_days == 10
     t = target.to_numpy()

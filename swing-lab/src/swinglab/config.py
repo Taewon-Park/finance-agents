@@ -61,5 +61,5 @@ def _read_yaml(path: Path) -> dict:
     with path.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
     if not isinstance(data, dict):
-        raise ValueError(f"{path}: YAML 최상위는 매핑이어야 합니다")
+        raise TypeError(f"{path}: YAML 최상위는 매핑이어야 합니다")
     return data
