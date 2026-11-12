@@ -124,18 +124,34 @@ def write_state(paper_dir: Path, state: AccountState) -> None:
     tmp.replace(state_path(paper_dir))
 
 
+_HELD: dict[Path, int] = {}  # 이 프로세스가 잡고 있는 잠금 (같은 프로세스 안에서는 다시 잡을 수 있다)
+
+
 @contextmanager
 def run_lock(paper_dir: Path) -> Iterator[None]:
-    """launchd 실행과 수동 실행이 겹치지 않게 한다."""
+    """launchd 실행(정시·로그인 시)과 수동 실행이 겹치지 않게 한다. 다른 프로세스가 잡고 있으면 PaperBusy.
+
+    CLI가 수집 전에 잡은 뒤 run_paper가 다시 잡는 경우처럼, 같은 프로세스 안의 중첩은 허용한다.
+    """
     paper_dir.mkdir(parents=True, exist_ok=True)
+    key = paper_dir.resolve()
+    if _HELD.get(key):
+        _HELD[key] += 1
+        try:
+            yield
+        finally:
+            _HELD[key] -= 1
+        return
     with (paper_dir / ".lock").open("w") as f:
         try:
             fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise PaperBusy("다른 페이퍼 실행이 진행 중입니다") from exc
+        _HELD[key] = 1
         try:
             yield
         finally:
+            _HELD.pop(key, None)
             fcntl.flock(f, fcntl.LOCK_UN)
 
 

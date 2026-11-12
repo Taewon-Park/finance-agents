@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import shutil
 from datetime import date
 from pathlib import Path
@@ -11,9 +12,11 @@ import pandas as pd
 import pytest
 import yaml
 from conftest import random_walk_prices
+from typer.testing import CliRunner
 
 from swinglab.backtest.engine import run_backtest
 from swinglab.backtest.metrics import annual_volatility, daily_returns
+from swinglab.cli import app
 from swinglab.config import BacktestConfig, UniverseConfig
 from swinglab.paper.account import MarketView, Rules, advance, open_account
 from swinglab.paper.config import (
@@ -22,9 +25,14 @@ from swinglab.paper.config import (
     load_paper_config,
     read_frozen,
 )
-from swinglab.paper.report import summarize_accounts, weekly_line, write_weekly
+from swinglab.paper.report import (
+    report_text,
+    summarize_accounts,
+    weekly_line,
+    write_weekly,
+)
 from swinglab.paper.runner import run_paper
-from swinglab.paper.store import TABLE_KEYS, read_state, read_table
+from swinglab.paper.store import TABLE_KEYS, read_state, read_table, run_lock
 from swinglab.research.selection import read_candidates
 from swinglab.strategies import Breakout, BuyAndHold, Rsi2Swing
 
@@ -168,6 +176,54 @@ def test_partial_ingest_day_not_processed(tmp_path: Path) -> None:
     assert all(a.last_processed == dates[251].date().isoformat() for a in report.accounts)
 
 
+def _sorted(paper_dir: Path, name: str) -> pd.DataFrame:
+    df = read_table(paper_dir, name)
+    return df.sort_values(TABLE_KEYS[name]).reset_index(drop=True) if not df.empty else df
+
+
+def test_catch_up_after_three_missed_days_matches_daily_runs(tmp_path: Path) -> None:
+    """3거래일씩 실행을 못 하고 넷째 날 한 번에 따라잡기를 반복해도 매일 실행한 기록과 같다 (모든 표와 상태)."""
+    cfg, prices = _cfg(), _prices()
+    dates = _dates(prices)
+    daily, catch_up = tmp_path / "daily", tmp_path / "catch_up"
+    for i in range(240, 329):
+        _run(cfg, _upto(prices, dates[i]), daily)
+    reports = [_run(cfg, _upto(prices, dates[i]), catch_up) for i in range(240, 329, 4)]
+
+    assert all(len(a.processed) == 4 for r in reports[1:] for a in r.accounts)  # 밀린 3일 + 그날
+    fills = read_table(daily, "fills")
+    assert {"buy", "sell"} <= set(fills["side"]) and len(read_table(daily, "trades")) >= 5  # 매매가 실제로 있었던 구간
+    for name in ("orders", "fills", "positions", "equity", "trades"):
+        pd.testing.assert_frame_equal(_sorted(catch_up, name), _sorted(daily, name), obj=name)
+    for account in cfg.strategies:
+        assert read_state(catch_up, "p1", account) == read_state(daily, "p1", account)
+
+
+def test_paper_run_skips_when_another_run_holds_lock(tmp_path: Path) -> None:
+    """정시 실행과 로그인 시 실행이 겹치면 뒤의 실행은 아무것도 하지 않고 종료 코드 0."""
+    paper_dir = tmp_path / "paper"
+    paper_dir.mkdir()
+    with (paper_dir / ".lock").open("w") as other:  # 다른 프로세스가 잡은 잠금과 같은 상태
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = CliRunner().invoke(app, ["paper", "run", "--no-ingest", "--paper-dir", str(paper_dir)])
+        fcntl.flock(other, fcntl.LOCK_UN)
+    assert result.exit_code == 0, result.output
+    assert "이미 실행 중, 건너뜀" in result.output
+    assert sorted(p.name for p in paper_dir.iterdir()) == [".lock"]  # 기록·상태를 쓰지 않았다
+
+
+def test_run_lock_is_reentrant_within_process(tmp_path: Path) -> None:
+    """CLI가 수집 전에 잡은 잠금 안에서 run_paper가 다시 잡아도 된다. 다른 프로세스에게는 계속 잠겨 있다."""
+    cfg, prices = _cfg(), _prices()
+    with run_lock(tmp_path):
+        _run(cfg, _upto(prices, _dates(prices)[250]), tmp_path)
+        with (tmp_path / ".lock").open("w") as other, pytest.raises(BlockingIOError):
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with (tmp_path / ".lock").open("w") as other:  # 빠져나오면 풀린다
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(other, fcntl.LOCK_UN)
+
+
 def test_orders_fill_at_next_session_open(tmp_path: Path) -> None:
     cfg, prices = _cfg(), _prices()
     dates = _dates(prices)
@@ -270,3 +326,26 @@ def test_report_and_weekly_line(tmp_path: Path) -> None:
     write_weekly(tmp_path, key, line.replace("|", "¦"))  # 같은 주는 한 줄로 바뀐다
     text = (tmp_path / "weekly.md").read_text(encoding="utf-8")
     assert text.count(key) == 1 and "¦" in text
+
+
+def test_report_hides_annualized_metrics_before_60_sessions(tmp_path: Path) -> None:
+    cfg, prices = _cfg(), _prices()
+    dates = _dates(prices)
+    _run(cfg, _upto(prices, dates[240]), tmp_path)
+    _run(cfg, _upto(prices, dates[299]), tmp_path)  # 59거래일
+
+    short = summarize_accounts(cfg, tmp_path, prices)
+    assert all(s.sessions == 59 for s in short)
+    for s in short:
+        assert all(np.isnan(v) for v in (s.cagr, s.sharpe, s.spy_cagr, s.spy_sharpe, s.mix_cagr))
+        assert not np.isnan(s.total_return) and not np.isnan(s.spy_total_return) and not np.isnan(s.vol)
+    text = report_text(cfg, short, dates[240].date().isoformat())
+    row = next(line for line in text.splitlines() if line.startswith("| C "))
+    cells = [c.strip() for c in row.strip("|").split("|")]
+    assert cells[4] == "–" and cells[6] == "–" and cells[3] != "–"  # CAGR, 샤프는 빈칸, 누적은 표시
+    assert "60거래일 전에는 CAGR·샤프를" in text
+
+    _run(cfg, _upto(prices, dates[300]), tmp_path)  # 60거래일부터 표시
+    full = summarize_accounts(cfg, tmp_path, prices)
+    assert all(s.sessions == 60 and not np.isnan(s.cagr) and not np.isnan(s.sharpe) for s in full)
+    assert "60거래일 전에는" not in report_text(cfg, full, dates[240].date().isoformat())

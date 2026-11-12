@@ -34,6 +34,7 @@ from swinglab.paper.report import (
     weekly_line,
     write_weekly,
 )
+from swinglab.paper.store import run_lock
 from swinglab.pipeline.calendar import last_completed_session, nyse_sessions
 from swinglab.pipeline.clean import run_checks
 from swinglab.pipeline.fx import ingest_fx, read_fx
@@ -281,8 +282,20 @@ def paper_run(
     data_dir: Path = DataDir,
     paper_dir: Path = PaperDir,
 ) -> None:
-    """증분 수집 → 고정 확인 → 놓친 거래일까지 하루씩 체결·평가·다음 주문 (같은 날은 다시 처리하지 않음)."""
+    """증분 수집 → 고정 확인 → 놓친 거래일까지 하루씩 체결·평가·다음 주문 (같은 날은 다시 처리하지 않음).
+
+    다른 paper run이 실행 중이면(정시 실행과 로그인 시 실행이 겹친 경우 등) 아무것도 하지 않고 정상 종료한다.
+    """
     typer.echo(f"[{datetime.now().astimezone().isoformat(timespec='seconds')}] paper run")
+    try:
+        with run_lock(paper_dir):
+            _paper_run(do_ingest, config_dir, data_dir, paper_dir)
+    except PaperBusy:
+        typer.echo("이미 실행 중, 건너뜀 (다른 paper run이 잠금을 잡고 있음)")
+
+
+def _paper_run(do_ingest: bool, config_dir: Path, data_dir: Path, paper_dir: Path) -> None:
+    """수집 전부터 잠금을 잡은 상태에서 실행한다 (두 실행이 데이터를 동시에 쓰지 않게)."""
     cfg = load_paper_config(config_dir)
     universe = load_universe(config_dir)
     failed: list[str] = []
@@ -297,7 +310,7 @@ def paper_run(
     prices = _load_prices(data_dir)
     try:
         result = run_paper(cfg, prices, universe, paper_dir, Path.cwd(), git_commit(Path.cwd()))
-    except (PaperRefused, PaperBusy, ValueError) as exc:
+    except (PaperRefused, ValueError) as exc:
         typer.echo(f"실행 거부: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     if result.frozen_created:
