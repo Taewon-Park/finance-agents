@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- 2단계 페이퍼 트레이딩: 매일 07:00(맥 현지 시간, KST) swinglab paper run.
+<!-- 2단계 페이퍼 트레이딩: 로그인·재부팅 때(RunAtLoad)와 매일 07:00(맥 현지 시간, KST)에 swinglab paper run.
+     잠자기·전원 꺼짐으로 늦어져도 다음 실행이 밀린 거래일을 순서대로 따라잡는다. 두 실행이 겹치면 뒤의 실행은 건너뛴다.
+     caffeinate -i: 실행하는 동안 맥이 유휴 잠자기에 들지 않게 한다.
      경로는 main 체크아웃(/Users/taylor/Projects/finance-agents/swing-lab) 기준. 등록·해제는 swing-lab/README.md 참고. -->
 <plist version="1.0">
 <dict>
@@ -8,6 +10,8 @@
   <string>com.swinglab.paper</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
     <string>/bin/zsh</string>
     <string>-lc</string>
     <string>cd /Users/taylor/Projects/finance-agents/swing-lab &amp;&amp; /Users/taylor/.local/bin/uv run swinglab paper run</string>
@@ -24,6 +28,6 @@
   <key>StandardErrorPath</key>
   <string>/Users/taylor/Projects/finance-agents/swing-lab/paper/logs/launchd.log</string>
   <key>RunAtLoad</key>
-  <false/>
+  <true/>
 </dict>
 </plist>

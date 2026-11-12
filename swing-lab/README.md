@@ -79,7 +79,12 @@ uv run swinglab rebalance --contribution 3000000   # private/holdings.csv → pr
 
 ### 페이퍼 자동 실행 (launchd)
 
-`ops/launchd/com.swinglab.paper.plist`: 매일 07:00(맥 현지 시간)에 main 체크아웃에서 `uv run swinglab paper run`. 로그는 `paper/logs/launchd.log`. `RunAtLoad`가 꺼져 있어 등록 직후에는 돌지 않고, 첫 자동 실행일이 페이퍼 시작일이 된다. 맥이 잠자기 중이면 깨어날 때 한 번 실행되고, 꺼져 있던 날은 다음 실행에서 순서대로 처리된다.
+`ops/launchd/com.swinglab.paper.plist`: "정시 실행"이 아니라 "켜질 때 따라잡기" 방식이다.
+
+- 로그인·재부팅 때(`RunAtLoad`, 등록 직후 포함)와 매일 07:00(맥 현지 시간)에 main 체크아웃에서 `uv run swinglab paper run`. 로그는 `paper/logs/launchd.log`.
+- 잠자기·전원 꺼짐으로 늦거나 건너뛴 날은 다음 실행이 마지막 처리일 다음 거래일부터 순서대로 따라잡는다. 처리할 날이 없으면 아무것도 하지 않는다.
+- `caffeinate -i`로 감싸서 실행하는 동안에는 유휴 잠자기에 들지 않는다.
+- 두 실행이 겹치면(로그인 시 실행과 07:00 실행) 뒤의 실행은 "이미 실행 중, 건너뜀"을 남기고 종료 코드 0으로 끝난다.
 
 ```bash
 # 등록 (main 체크아웃의 swing-lab/에서)
