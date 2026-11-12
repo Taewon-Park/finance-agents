@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import shutil
 from datetime import date
 from pathlib import Path
@@ -11,9 +12,11 @@ import pandas as pd
 import pytest
 import yaml
 from conftest import random_walk_prices
+from typer.testing import CliRunner
 
 from swinglab.backtest.engine import run_backtest
 from swinglab.backtest.metrics import annual_volatility, daily_returns
+from swinglab.cli import app
 from swinglab.config import BacktestConfig, UniverseConfig
 from swinglab.paper.account import MarketView, Rules, advance, open_account
 from swinglab.paper.config import (
@@ -24,7 +27,7 @@ from swinglab.paper.config import (
 )
 from swinglab.paper.report import summarize_accounts, weekly_line, write_weekly
 from swinglab.paper.runner import run_paper
-from swinglab.paper.store import TABLE_KEYS, read_state, read_table
+from swinglab.paper.store import TABLE_KEYS, read_state, read_table, run_lock
 from swinglab.research.selection import read_candidates
 from swinglab.strategies import Breakout, BuyAndHold, Rsi2Swing
 
@@ -166,6 +169,31 @@ def test_partial_ingest_day_not_processed(tmp_path: Path) -> None:
     report = _run(cfg, partial, tmp_path)
 
     assert all(a.last_processed == dates[251].date().isoformat() for a in report.accounts)
+
+
+def test_paper_run_skips_when_another_run_holds_lock(tmp_path: Path) -> None:
+    """정시 실행과 로그인 시 실행이 겹치면 뒤의 실행은 아무것도 하지 않고 종료 코드 0."""
+    paper_dir = tmp_path / "paper"
+    paper_dir.mkdir()
+    with (paper_dir / ".lock").open("w") as other:  # 다른 프로세스가 잡은 잠금과 같은 상태
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = CliRunner().invoke(app, ["paper", "run", "--no-ingest", "--paper-dir", str(paper_dir)])
+        fcntl.flock(other, fcntl.LOCK_UN)
+    assert result.exit_code == 0, result.output
+    assert "이미 실행 중, 건너뜀" in result.output
+    assert sorted(p.name for p in paper_dir.iterdir()) == [".lock"]  # 기록·상태를 쓰지 않았다
+
+
+def test_run_lock_is_reentrant_within_process(tmp_path: Path) -> None:
+    """CLI가 수집 전에 잡은 잠금 안에서 run_paper가 다시 잡아도 된다. 다른 프로세스에게는 계속 잠겨 있다."""
+    cfg, prices = _cfg(), _prices()
+    with run_lock(tmp_path):
+        _run(cfg, _upto(prices, _dates(prices)[250]), tmp_path)
+        with (tmp_path / ".lock").open("w") as other, pytest.raises(BlockingIOError):
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with (tmp_path / ".lock").open("w") as other:  # 빠져나오면 풀린다
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(other, fcntl.LOCK_UN)
 
 
 def test_orders_fill_at_next_session_open(tmp_path: Path) -> None:
