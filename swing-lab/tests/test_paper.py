@@ -171,6 +171,29 @@ def test_partial_ingest_day_not_processed(tmp_path: Path) -> None:
     assert all(a.last_processed == dates[251].date().isoformat() for a in report.accounts)
 
 
+def _sorted(paper_dir: Path, name: str) -> pd.DataFrame:
+    df = read_table(paper_dir, name)
+    return df.sort_values(TABLE_KEYS[name]).reset_index(drop=True) if not df.empty else df
+
+
+def test_catch_up_after_three_missed_days_matches_daily_runs(tmp_path: Path) -> None:
+    """3거래일씩 실행을 못 하고 넷째 날 한 번에 따라잡기를 반복해도 매일 실행한 기록과 같다 (모든 표와 상태)."""
+    cfg, prices = _cfg(), _prices()
+    dates = _dates(prices)
+    daily, catch_up = tmp_path / "daily", tmp_path / "catch_up"
+    for i in range(240, 329):
+        _run(cfg, _upto(prices, dates[i]), daily)
+    reports = [_run(cfg, _upto(prices, dates[i]), catch_up) for i in range(240, 329, 4)]
+
+    assert all(len(a.processed) == 4 for r in reports[1:] for a in r.accounts)  # 밀린 3일 + 그날
+    fills = read_table(daily, "fills")
+    assert {"buy", "sell"} <= set(fills["side"]) and len(read_table(daily, "trades")) >= 5  # 매매가 실제로 있었던 구간
+    for name in ("orders", "fills", "positions", "equity", "trades"):
+        pd.testing.assert_frame_equal(_sorted(catch_up, name), _sorted(daily, name), obj=name)
+    for account in cfg.strategies:
+        assert read_state(catch_up, "p1", account) == read_state(daily, "p1", account)
+
+
 def test_paper_run_skips_when_another_run_holds_lock(tmp_path: Path) -> None:
     """정시 실행과 로그인 시 실행이 겹치면 뒤의 실행은 아무것도 하지 않고 종료 코드 0."""
     paper_dir = tmp_path / "paper"
