@@ -25,7 +25,12 @@ from swinglab.paper.config import (
     load_paper_config,
     read_frozen,
 )
-from swinglab.paper.report import summarize_accounts, weekly_line, write_weekly
+from swinglab.paper.report import (
+    report_text,
+    summarize_accounts,
+    weekly_line,
+    write_weekly,
+)
 from swinglab.paper.runner import run_paper
 from swinglab.paper.store import TABLE_KEYS, read_state, read_table, run_lock
 from swinglab.research.selection import read_candidates
@@ -321,3 +326,26 @@ def test_report_and_weekly_line(tmp_path: Path) -> None:
     write_weekly(tmp_path, key, line.replace("|", "¦"))  # 같은 주는 한 줄로 바뀐다
     text = (tmp_path / "weekly.md").read_text(encoding="utf-8")
     assert text.count(key) == 1 and "¦" in text
+
+
+def test_report_hides_annualized_metrics_before_60_sessions(tmp_path: Path) -> None:
+    cfg, prices = _cfg(), _prices()
+    dates = _dates(prices)
+    _run(cfg, _upto(prices, dates[240]), tmp_path)
+    _run(cfg, _upto(prices, dates[299]), tmp_path)  # 59거래일
+
+    short = summarize_accounts(cfg, tmp_path, prices)
+    assert all(s.sessions == 59 for s in short)
+    for s in short:
+        assert all(np.isnan(v) for v in (s.cagr, s.sharpe, s.spy_cagr, s.spy_sharpe, s.mix_cagr))
+        assert not np.isnan(s.total_return) and not np.isnan(s.spy_total_return) and not np.isnan(s.vol)
+    text = report_text(cfg, short, dates[240].date().isoformat())
+    row = next(line for line in text.splitlines() if line.startswith("| C "))
+    cells = [c.strip() for c in row.strip("|").split("|")]
+    assert cells[4] == "–" and cells[6] == "–" and cells[3] != "–"  # CAGR, 샤프는 빈칸, 누적은 표시
+    assert "60거래일 전에는 CAGR·샤프를" in text
+
+    _run(cfg, _upto(prices, dates[300]), tmp_path)  # 60거래일부터 표시
+    full = summarize_accounts(cfg, tmp_path, prices)
+    assert all(s.sessions == 60 and not np.isnan(s.cagr) and not np.isnan(s.sharpe) for s in full)
+    assert "60거래일 전에는" not in report_text(cfg, full, dates[240].date().isoformat())

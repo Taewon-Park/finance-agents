@@ -28,6 +28,8 @@ from swinglab.strategies.buy_hold import BuyAndHold
 
 JUDGEMENT_MONTHS = 6
 MIN_DAYS_FOR_METRICS = 3  # 자산가치 3행(수익률 2개) 미만이면 변동성·샤프를 내지 않는다
+# 이 거래일 수 미만이면 연율 지표(CAGR·샤프)를 내지 않는다. 짧은 기간의 연율화는 크게 부풀려진다 (누적 수익률로 본다).
+MIN_SESSIONS_FOR_ANNUALIZED = 60
 
 
 @dataclass
@@ -72,6 +74,7 @@ def summarize_accounts(cfg: PaperConfig, paper_dir: Path, prices: pd.DataFrame) 
             continue
         curve = eq["equity"].astype(float)
         enough = len(curve) >= MIN_DAYS_FOR_METRICS
+        annualized = len(curve) - 1 >= MIN_SESSIONS_FOR_ANNUALIZED
         rets = daily_returns(curve)
         acct_trades = (
             trades[(trades["paper_id"] == cfg.paper_id) & (trades["account"] == account)]
@@ -91,20 +94,20 @@ def summarize_accounts(cfg: PaperConfig, paper_dir: Path, prices: pd.DataFrame) 
                 last=curve.index[-1].date().isoformat(),
                 sessions=len(curve) - 1,
                 total_return=float(curve.iloc[-1] / curve.iloc[0] - 1.0),
-                cagr=cagr(curve) if len(curve) >= 2 else math.nan,
+                cagr=cagr(curve) if annualized else math.nan,
                 vol=vol,
-                sharpe=sharpe_ratio(rets) if enough else math.nan,
+                sharpe=sharpe_ratio(rets) if annualized else math.nan,
                 mdd=max_drawdown(curve),
                 n_trades=n,
                 win_rate=float((acct_trades["return"] > 0).mean()) if n else math.nan,
                 exposure=float((eq["n_positions"].iloc[1:] > 0).mean()) if len(eq) > 1 else math.nan,
                 spy_total_return=_total(spy),
-                spy_cagr=cagr(spy) if spy is not None else math.nan,
-                spy_sharpe=sharpe_ratio(daily_returns(spy)) if spy is not None and enough else math.nan,
+                spy_cagr=cagr(spy) if spy is not None and annualized else math.nan,
+                spy_sharpe=sharpe_ratio(daily_returns(spy)) if spy is not None and annualized else math.nan,
                 spy_mdd=max_drawdown(spy) if spy is not None else math.nan,
                 mix_weight=weight,
                 mix_total_return=_total(mix),
-                mix_cagr=cagr(mix) if mix is not None else math.nan,
+                mix_cagr=cagr(mix) if mix is not None and annualized else math.nan,
                 mix_mdd=max_drawdown(mix) if mix is not None else math.nan,
             )
         )
@@ -158,6 +161,13 @@ def report_text(cfg: PaperConfig, summaries: list[AccountSummary], start_date: s
             f"{_ret(s.spy_mdd)} | {_pct(s.mix_weight)} | {_ret(s.mix_total_return)} | {_ret(s.mix_cagr)} | "
             f"{_ret(s.mix_mdd)} |"
         )
+    short = [s for s in summaries if s.sessions < MIN_SESSIONS_FOR_ANNUALIZED]
+    if short:
+        note = (
+            f"거래일 {min(s.sessions for s in short)}일: {MIN_SESSIONS_FOR_ANNUALIZED}거래일 전에는 CAGR·샤프를 "
+            "계산하지 않는다 (\"–\"). 그동안은 누적 수익률로 본다."
+        )
+        lines += ["", note]
     if any(s.sessions < MIN_DAYS_FOR_METRICS - 1 for s in summaries):
         lines += ["", "거래일이 적어 변동성·샤프·혼합 비교는 아직 계산하지 않는다."]
     return "\n".join(lines)
