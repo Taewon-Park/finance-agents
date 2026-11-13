@@ -66,7 +66,7 @@ uv run swinglab report stage1               # reports/stage1.html (results/ 파�
 
 ```bash
 uv run swinglab ingest                      # 0단계 20종 + EFA·EEM·BIL(collect_only) + 원/달러 환율(FRED DEXKOUS)
-uv run swinglab paper run                   # 매일 1회 (launchd). 수집 → 고정 확인 → 놓친 거래일까지 하루씩 처리
+uv run swinglab paper run                   # launchd가 1시간마다. 전원·처리할 날 확인 → 수집 → 놓친 거래일까지 하루씩 처리
 uv run swinglab paper report                # 시작일 이후 누적 지표, 같은 기간 SPY, 변동성 맞춤 SPY 혼합
 uv run swinglab alloc backtest              # P0~P3 × 0/5/10bp (서술용) → reports/stage2_alloc.html, .md
 uv run swinglab rebalance --contribution 3000000   # private/holdings.csv → private/rebalance/<YYYY-Qn>.md
@@ -81,10 +81,15 @@ uv run swinglab rebalance --contribution 3000000   # private/holdings.csv → pr
 
 `ops/launchd/com.swinglab.paper.plist`: "정시 실행"이 아니라 "켜질 때 따라잡기" 방식이다.
 
-- 로그인·재부팅 때(`RunAtLoad`, 등록 직후 포함)와 매일 07:00(맥 현지 시간)에 main 체크아웃에서 `uv run swinglab paper run`. 로그는 `paper/logs/launchd.log`.
-- 잠자기·전원 꺼짐으로 늦거나 건너뛴 날은 다음 실행이 마지막 처리일 다음 거래일부터 순서대로 따라잡는다. 처리할 날이 없으면 아무것도 하지 않는다.
-- `caffeinate -i`로 감싸서 실행하는 동안에는 유휴 잠자기에 들지 않는다.
-- 두 실행이 겹치면(로그인 시 실행과 07:00 실행) 뒤의 실행은 "이미 실행 중, 건너뜀"을 남기고 종료 코드 0으로 끝난다.
+- 로그인·재부팅 때(`RunAtLoad`, 등록 직후 포함)와 1시간마다(`StartInterval` 3600) main 체크아웃에서 `uv run swinglab paper run --skip-log paper/logs/skip.log`.
+- `paper run`은 시작할 때 이 순서로 확인한다. 건너뛸 때는 모두 종료 코드 0이다.
+  1. 전원 연결이 아니면 "배터리 상태, 건너뜀" (`--force-battery`로 무시). 배터리 상태의 잠깐 깨어남(DarkWake)에서 실행되면 몇 초씩 끊겨 진행되기 때문이다.
+  2. 모든 계정의 마지막 처리일이 마감된 최근 NYSE 거래일 이상이면 수집 없이 "처리할 날 없음"
+  3. 잠금 → 수집 → 처리. 다른 실행이 잠금을 잡고 있으면 "이미 실행 중, 건너뜀"
+- 잠자기·전원 꺼짐·배터리로 밀린 날은 전원이 연결된 첫 실행이 마지막 처리일 다음 거래일부터 순서대로 따라잡는다.
+- 로그
+  - `paper/logs/launchd.log`: 실제 처리 기록 (실행 헤더, 수집·처리 결과, 오류)
+  - `paper/logs/skip.log`: 건너뛴 실행을 날짜·사유별 한 줄로 (`2026-11-13 | 배터리 상태, 건너뜀 | 9회 | 처음 08:00:05 | 마지막 16:00:07`)
 
 ```bash
 # 등록 (main 체크아웃의 swing-lab/에서)

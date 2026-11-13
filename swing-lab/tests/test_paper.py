@@ -199,8 +199,9 @@ def test_catch_up_after_three_missed_days_matches_daily_runs(tmp_path: Path) -> 
         assert read_state(catch_up, "p1", account) == read_state(daily, "p1", account)
 
 
-def test_paper_run_skips_when_another_run_holds_lock(tmp_path: Path) -> None:
+def test_paper_run_skips_when_another_run_holds_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """정시 실행과 로그인 시 실행이 겹치면 뒤의 실행은 아무것도 하지 않고 종료 코드 0."""
+    monkeypatch.setattr("swinglab.cli.power_source", lambda: "ac")  # 전원 확인(a)을 통과한 상태
     paper_dir = tmp_path / "paper"
     paper_dir.mkdir()
     with (paper_dir / ".lock").open("w") as other:  # 다른 프로세스가 잡은 잠금과 같은 상태
