@@ -5,9 +5,8 @@
 
 ## Git
 
-- 작업은 main에서 새 브랜치를 만들어 한다. 만들 때 upstream을 설정하지 않는다.
-  - `git switch --no-track -c <브랜치> main`
-  - 원격 추적은 push할 때 같은 이름의 원격 브랜치로만 생긴다 (`git push -u origin <브랜치>`).
+- 작업은 main에서 새 브랜치를 만들어 한다 (`git switch --no-track -c <브랜치명> main`).
+- 브랜치 생성 시에는 upstream을 걸지 않는다. 첫 push 때 `git push -u origin <브랜치명>`으로 같은 이름의 원격 브랜치만 추적한다. 작업 브랜치가 origin/main을 추적하면 안 된다.
 - 커밋마다 테스트와 ruff가 통과해야 한다 (`swing-lab/`에서 `uv run pytest`, `uv run ruff check .`).
   - 커밋 전에 `git diff --cached --stat`으로 스테이징된 파일을 확인한다.
 - PR은 merge commit 방식으로 머지한다.
