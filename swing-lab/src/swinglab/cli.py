@@ -28,6 +28,7 @@ from swinglab.alloc.summary import checked_summary, request_summary
 from swinglab.config import load_backtest_config, load_universe
 from swinglab.paper import PaperBusy, PaperRefused, load_paper_config, run_paper
 from swinglab.paper.config import read_frozen
+from swinglab.paper.preflight import nothing_to_process, power_source, record_skip
 from swinglab.paper.report import (
     report_text,
     summarize_accounts,
@@ -278,20 +279,45 @@ def report_stage1(
 @paper_app.command("run")
 def paper_run(
     do_ingest: bool = typer.Option(True, "--ingest/--no-ingest", help="처리 전에 증분 수집 (launchd 실행은 기본값)"),
+    force_battery: bool = typer.Option(False, "--force-battery", help="배터리 상태여도 실행"),
+    skip_log: Path | None = typer.Option(
+        None, "--skip-log", help="건너뛴 실행을 이 파일에 날짜·사유별 한 줄로 기록 (없으면 화면에 출력)"
+    ),
     config_dir: Path = ConfigDir,
     data_dir: Path = DataDir,
     paper_dir: Path = PaperDir,
 ) -> None:
-    """증분 수집 → 고정 확인 → 놓친 거래일까지 하루씩 체결·평가·다음 주문 (같은 날은 다시 처리하지 않음).
+    """전원·처리할 날 확인 → 잠금 → 증분 수집 → 놓친 거래일까지 하루씩 체결·평가·다음 주문.
 
-    다른 paper run이 실행 중이면(정시 실행과 로그인 시 실행이 겹친 경우 등) 아무것도 하지 않고 정상 종료한다.
+    건너뛰는 경우(모두 종료 코드 0): 배터리 상태(--force-battery로 무시), 처리할 날 없음
+    (마지막 처리일 ≥ 마감된 최근 NYSE 거래일, 수집도 안 함), 다른 paper run이 실행 중.
     """
-    typer.echo(f"[{datetime.now().astimezone().isoformat(timespec='seconds')}] paper run")
+    now = datetime.now().astimezone()
+
+    def skip(reason: str) -> None:
+        if skip_log is not None:
+            record_skip(skip_log, reason, now)
+        else:
+            typer.echo(reason)
+
+    power = power_source()
+    if power == "battery" and not force_battery:
+        skip("배터리 상태, 건너뜀")
+        return
+    cfg = load_paper_config(config_dir)
+    if nothing_to_process(paper_dir, cfg, last_completed_session()):
+        skip("처리할 날 없음")
+        return
     try:
         with run_lock(paper_dir):
+            typer.echo(f"[{now.isoformat(timespec='seconds')}] paper run")
+            if power == "unknown":
+                typer.echo("전원 상태를 확인하지 못함 (계속 진행)")
+            elif power == "battery":
+                typer.echo("배터리 상태지만 --force-battery로 진행")
             _paper_run(do_ingest, config_dir, data_dir, paper_dir)
     except PaperBusy:
-        typer.echo("이미 실행 중, 건너뜀 (다른 paper run이 잠금을 잡고 있음)")
+        skip("이미 실행 중, 건너뜀")
 
 
 def _paper_run(do_ingest: bool, config_dir: Path, data_dir: Path, paper_dir: Path) -> None:
